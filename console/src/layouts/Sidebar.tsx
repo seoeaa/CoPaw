@@ -247,7 +247,9 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
         const enPattern = /###\s*How to update CoPaw[\s\S]*?(?=\n###|$)/;
         const match = text.match(faqLang === "zh" ? zhPattern : enPattern);
         setUpdateMarkdown(
-          match ? match[0].trim() : UPDATE_MD[lang] ?? UPDATE_MD.en,
+          match && lang !== "ru"
+            ? match[0].trim()
+            : UPDATE_MD[lang] ?? UPDATE_MD.en,
         );
       })
       .catch(() => {

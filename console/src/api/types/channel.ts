@@ -42,6 +42,8 @@ export interface TelegramConfig extends BaseChannelConfig {
   http_proxy: string;
   http_proxy_auth: string;
   show_typing?: boolean;
+  allowFrom?: string[];
+  deniedMessage?: string;
 }
 
 export type ConsoleConfig = BaseChannelConfig;

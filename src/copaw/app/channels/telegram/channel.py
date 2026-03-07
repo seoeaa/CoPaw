@@ -225,6 +225,8 @@ class TelegramChannel(BaseChannel):
         show_typing: bool = True,
         filter_tool_messages: bool = False,
         filter_thinking: bool = False,
+        allow_from: Optional[list[str]] = None,
+        denied_message: str = "",
     ):
         super().__init__(
             process,
@@ -243,6 +245,8 @@ class TelegramChannel(BaseChannel):
         )
         self._show_typing = show_typing
         self._typing_tasks: dict[str, asyncio.Task] = {}
+        self._allow_from = allow_from or []
+        self._denied_message = denied_message
         self._task: Optional[asyncio.Task] = None
         self._application = None
         if self.enabled and self._bot_token:
@@ -298,6 +302,32 @@ class TelegramChannel(BaseChannel):
                 None,
             ):
                 return
+
+            meta = _message_meta(update)
+            chat_id = str(meta.get("chat_id", ""))
+            user = getattr(
+                update.message or getattr(update, "edited_message"),
+                "from_user",
+                None,
+            )
+            user_id = str(getattr(user, "id", "")) if user else ""
+
+            # Access Control Check
+            if self._allow_from:
+                is_allowed = (user_id in self._allow_from) or (
+                    chat_id in self._allow_from
+                )
+                if not is_allowed:
+                    msg = self._denied_message or "You do not have permission to use this bot."
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=msg,
+                    )
+                    logger.warning(
+                        f"telegram: unauthorized access attempt from {user_id} in {chat_id}",
+                    )
+                    return
+
             (
                 content_parts,
                 has_bot_command,
@@ -306,16 +336,9 @@ class TelegramChannel(BaseChannel):
                 bot=context.bot,
                 media_dir=self._media_dir,
             )
-            meta = _message_meta(update)
             if has_bot_command:
                 meta["has_bot_command"] = True
-            chat_id = meta.get("chat_id", "")
-            user = getattr(
-                update.message or getattr(update, "edited_message"),
-                "from_user",
-                None,
-            )
-            sender_id = str(getattr(user, "id", "")) if user else chat_id
+            sender_id = user_id or chat_id
             native = {
                 "channel_id": self.channel,
                 "sender_id": sender_id,
@@ -348,6 +371,12 @@ class TelegramChannel(BaseChannel):
             bot_prefix=os.getenv("TELEGRAM_BOT_PREFIX", ""),
             on_reply_sent=on_reply_sent,
             show_typing=os.getenv("TELEGRAM_SHOW_TYPING", "1") == "1",
+            allow_from=[
+                uid.strip()
+                for uid in os.getenv("TELEGRAM_ALLOW_FROM", "").split(",")
+                if uid.strip()
+            ],
+            denied_message=os.getenv("TELEGRAM_DENIED_MESSAGE", ""),
         )
 
     @classmethod
@@ -382,6 +411,8 @@ class TelegramChannel(BaseChannel):
                 show_typing=channel_show_typing
                 if channel_show_typing is not None
                 else True,
+                allow_from=config.get("allow_from") or [],
+                denied_message=config.get("denied_message") or "",
             )
         return cls(
             process=process,
@@ -397,6 +428,8 @@ class TelegramChannel(BaseChannel):
             show_typing=channel_show_typing
             if channel_show_typing is not None
             else True,
+            allow_from=config.allow_from,
+            denied_message=config.denied_message,
         )
 
     def _chunk_text(self, text: str) -> list[str]:

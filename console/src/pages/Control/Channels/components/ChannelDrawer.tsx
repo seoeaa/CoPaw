@@ -193,10 +193,31 @@ export function ChannelDrawer({
             </Form.Item>
             <Form.Item
               name="show_typing"
-              label="Show Typing"
+              label={t("channels.showTyping")}
               valuePropName="checked"
             >
               <Switch />
+            </Form.Item>
+            <Form.Item
+              name="allowFrom"
+              label={t("channels.allowFrom")}
+              tooltip={t("channels.allowFromTooltip")}
+            >
+              <Select
+                mode="tags"
+                style={{ width: "100%" }}
+                placeholder="User/Group IDs"
+              />
+            </Form.Item>
+            <Form.Item
+              name="deniedMessage"
+              label={t("channels.deniedMessage")}
+              tooltip={t("channels.deniedMessageTooltip")}
+            >
+              <Input.TextArea
+                rows={2}
+                placeholder={t("channels.deniedMessagePlaceholder")}
+              />
             </Form.Item>
           </>
         );

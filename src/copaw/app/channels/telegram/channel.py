@@ -123,7 +123,9 @@ async def _build_content_parts_from_message(
         return [TextContent(type=ContentType.TEXT, text="")], False
 
     content_parts: list[Any] = []
-    text = (getattr(message, "text", None) or getattr(message, "caption") or "").strip()
+    text = (
+        getattr(message, "text", None) or getattr(message, "caption") or ""
+    ).strip()
 
     entities = (
         getattr(message, "entities", None)

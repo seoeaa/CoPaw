@@ -193,15 +193,14 @@ export function ChannelDrawer({
             </Form.Item>
             <Form.Item
               name="show_typing"
-              label={t("channels.showTyping")}
+              label="Show Typing"
               valuePropName="checked"
             >
               <Switch />
             </Form.Item>
             <Form.Item
-              name="allow_from"
-              label={t("channels.allowFrom")}
-              tooltip={t("channels.allowFromTooltip")}
+              name="allowFrom"
+              label="Allowlist"
             >
               <Select
                 mode="tags"
@@ -210,13 +209,12 @@ export function ChannelDrawer({
               />
             </Form.Item>
             <Form.Item
-              name="denied_message"
-              label={t("channels.deniedMessage")}
-              tooltip={t("channels.deniedMessageTooltip")}
+              name="deniedMessage"
+              label="Access Denied Message"
             >
               <Input.TextArea
                 rows={2}
-                placeholder={t("channels.deniedMessagePlaceholder")}
+                placeholder="You do not have permission to use this bot."
               />
             </Form.Item>
           </>

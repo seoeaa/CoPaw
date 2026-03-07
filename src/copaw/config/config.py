@@ -77,8 +77,8 @@ class TelegramConfig(BaseChannelConfig):
     http_proxy: str = ""
     http_proxy_auth: str = ""
     show_typing: Optional[bool] = None
-    allow_from: list[str] = Field(default_factory=list)
-    denied_message: str = ""
+    allow_from: list[str] = Field(default_factory=list, alias="allowFrom")
+    denied_message: str = Field(default="", alias="deniedMessage")
 
 
 class ConsoleConfig(BaseChannelConfig):

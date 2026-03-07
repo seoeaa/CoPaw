@@ -303,8 +303,19 @@ class TelegramChannel(BaseChannel):
             ):
                 return
 
+            (
+                content_parts,
+                has_bot_command,
+            ) = await _build_content_parts_from_message(
+                update,
+                bot=context.bot,
+                media_dir=self._media_dir,
+            )
             meta = _message_meta(update)
-            chat_id = str(meta.get("chat_id", ""))
+            if has_bot_command:
+                meta["has_bot_command"] = True
+
+            chat_id = meta.get("chat_id", "")
             user = getattr(
                 update.message or getattr(update, "edited_message"),
                 "from_user",
@@ -328,17 +339,7 @@ class TelegramChannel(BaseChannel):
                     )
                     return
 
-            (
-                content_parts,
-                has_bot_command,
-            ) = await _build_content_parts_from_message(
-                update,
-                bot=context.bot,
-                media_dir=self._media_dir,
-            )
-            if has_bot_command:
-                meta["has_bot_command"] = True
-            sender_id = user_id or chat_id
+            sender_id = str(getattr(user, "id", "")) if user else chat_id
             native = {
                 "channel_id": self.channel,
                 "sender_id": sender_id,

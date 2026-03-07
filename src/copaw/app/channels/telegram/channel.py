@@ -22,6 +22,7 @@ from agentscope_runtime.engine.schemas.agent_schemas import (
 )
 
 from ....config.config import TelegramConfig as TelegramChannelConfig
+from .format_html import markdown_to_telegram_html, strip_markdown
 from ..base import (
     BaseChannel,
     OnReplySent,
@@ -208,33 +209,8 @@ def _message_meta(update: Any) -> dict:
     }
 
 
-def _escape_markdown(text: str) -> str:
-    """Escape text for Telegram Legacy Markdown (v1).
-
-    V1 is much more permissive than V2. We only need to escape
-    unpaired formatting characters like *, _, and ` to prevent crashes.
-    """
-    if not text:
-        return text
-
-    # Handle common unpaired cases or sensitive characters for V1.
-    # In V1, we mainly care about * and _ if they aren't forming a pair.
-    # But for an LLM, the safest is to just pass a reasonably clean string.
-
-    # We can use a simple regex to escape symbols if they aren't followed by something
-    # that looks like the start of a formatting block.
-    # Actually, for V1, many people just use the raw text and it works fine
-    # unless there's a stray * or _.
-    
-    # Let's do a very basic cleanup:
-    # 1. Escape lone asterisks or underscores that might break parsing.
-    # This is a bit naive but usually safer than V2.
-    text = text.replace("\\", "\\\\") # Escape backslashes first
-    
-    return text
-
-
 class TelegramChannel(BaseChannel):
+
     """Telegram channel: Bot API polling; session_id = telegram:{chat_id}."""
 
     channel = "telegram"
@@ -520,20 +496,20 @@ class TelegramChannel(BaseChannel):
         self._stop_typing(chat_id)
         chunks = self._chunk_text(text)
         for chunk in chunks:
-            chunk_escaped = _escape_markdown(chunk)
+            html_chunk = markdown_to_telegram_html(chunk)
             try:
                 await bot.send_message(
                     chat_id=chat_id,
-                    text=chunk_escaped,
-                    parse_mode=ParseMode.MARKDOWN,
+                    text=html_chunk,
+                    parse_mode=ParseMode.HTML,
                 )
             except Exception:
                 logger.warning(
-                    "telegram MARKDOWN failed for chunk: %r, trying plain text",
-                    chunk_escaped,
+                    "telegram HTML send failed, trying plain text",
                 )
                 try:
-                    await bot.send_message(chat_id=chat_id, text=chunk)
+                    plain = strip_markdown(chunk)
+                    await bot.send_message(chat_id=chat_id, text=plain)
                 except Exception:
                     logger.exception("telegram send_message fallback failed")
                     return

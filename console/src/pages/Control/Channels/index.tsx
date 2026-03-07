@@ -56,8 +56,8 @@ function ChannelsPage() {
     const channelConfig = channels[key] || { enabled: false, bot_prefix: "" };
     form.setFieldsValue({
       ...channelConfig,
-      filter_tool_messages: !channelConfig.filter_tool_messages,
-      filter_thinking: !channelConfig.filter_thinking,
+      filter_tool_messages: channelConfig.filter_tool_messages,
+      filter_thinking: channelConfig.filter_thinking,
     });
   };
 
@@ -74,8 +74,8 @@ function ChannelsPage() {
     const updatedChannel: Record<string, unknown> = {
       ...savedConfig,
       ...values,
-      filter_tool_messages: !values.filter_tool_messages,
-      filter_thinking: !values.filter_thinking,
+      filter_tool_messages: values.filter_tool_messages,
+      filter_thinking: values.filter_thinking,
     };
 
     setSaving(true);
@@ -117,9 +117,8 @@ function ChannelsPage() {
           {FILTER_TABS.map(({ key, label }) => (
             <button
               key={key}
-              className={`${styles.filterTab} ${
-                filter === key ? styles.filterTabActive : ""
-              }`}
+              className={`${styles.filterTab} ${filter === key ? styles.filterTabActive : ""
+                }`}
               onClick={() => setFilter(key)}
             >
               {label}

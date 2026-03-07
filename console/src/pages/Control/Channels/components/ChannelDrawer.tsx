@@ -199,7 +199,7 @@ export function ChannelDrawer({
               <Switch />
             </Form.Item>
             <Form.Item
-              name="allowFrom"
+              name="allow_from"
               label={t("channels.allowFrom")}
               tooltip={t("channels.allowFromTooltip")}
             >
@@ -210,7 +210,7 @@ export function ChannelDrawer({
               />
             </Form.Item>
             <Form.Item
-              name="deniedMessage"
+              name="denied_message"
               label={t("channels.deniedMessage")}
               tooltip={t("channels.deniedMessageTooltip")}
             >

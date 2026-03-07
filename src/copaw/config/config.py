@@ -71,12 +71,14 @@ class QQConfig(BaseChannelConfig):
 class TelegramConfig(BaseChannelConfig):
     """Telegram channel: bot_token from BotFather; optional proxy."""
 
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
     bot_token: str = ""
     http_proxy: str = ""
     http_proxy_auth: str = ""
     show_typing: Optional[bool] = None
-    allow_from: list[str] = Field(default_factory=list, alias="allowFrom")
-    denied_message: str = Field(default="", alias="deniedMessage")
+    allow_from: list[str] = Field(default_factory=list)
+    denied_message: str = ""
 
 
 class ConsoleConfig(BaseChannelConfig):

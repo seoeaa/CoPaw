@@ -248,6 +248,8 @@
     "allowFrom": "Allowlist Users",
     "allowFromTooltip": "List of user IDs allowed to interact with the bot (format: nickname#last4, e.g. John#1234)",
     "allowFromPlaceholder": "Enter user ID and press Enter to add",
+    "denyMessage": "Access Denied Message",
+    "denyMessageTooltip": "Custom message shown to users when access is denied",
     "twilioAccountSid": "Twilio Account SID",
     "twilioAuthToken": "Twilio Auth Token",
     "phoneNumber": "Phone Number",

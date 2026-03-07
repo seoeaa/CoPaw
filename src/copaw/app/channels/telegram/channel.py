@@ -205,6 +205,58 @@ def _message_meta(update: Any) -> dict:
     }
 
 
+def _check_telegram_allowlist(
+    sender_id: str,
+    is_group: bool,
+    dm_policy: str,
+    group_policy: str,
+    allow_from: set,
+    deny_message: str = "",
+) -> tuple[bool, Optional[str]]:
+    """Check if sender is allowed based on dm_policy/group_policy.
+
+    Args:
+        sender_id: The sender's user ID
+        is_group: Whether the message is from a group chat
+        dm_policy: "open" or "allowlist" for direct messages
+        group_policy: "open" or "allowlist" for group messages
+        allow_from: Set of allowed sender IDs
+        deny_message: Custom message for denied users
+
+    Returns:
+        (allowed, error_message): allowed=True if message should be
+        processed, error_message contains the rejection message if not
+        allowed
+    """
+    # Determine which policy to apply
+    policy = group_policy if is_group else dm_policy
+
+    # If policy is "open", allow all
+    if policy == "open":
+        return True, None
+
+    # If policy is "allowlist", check if sender is in allow_from
+    if sender_id in allow_from:
+        return True, None
+
+    # Use custom message if provided, otherwise use default
+    if deny_message:
+        msg = deny_message
+    elif is_group:
+        msg = (
+            "Sorry, this bot is only available to authorized users. "
+            "Please contact the administrator. Your ID: "
+            f"{sender_id}"
+        )
+    else:
+        msg = (
+            "Sorry, you are not authorized to use this bot. "
+            "Please contact the administrator to add your ID to "
+            f"the allowlist. Your ID: {sender_id}"
+        )
+    return False, msg
+
+
 class TelegramChannel(BaseChannel):
     """Telegram channel: Bot API polling; session_id = telegram:{chat_id}."""
 
@@ -225,6 +277,10 @@ class TelegramChannel(BaseChannel):
         show_typing: bool = True,
         filter_tool_messages: bool = False,
         filter_thinking: bool = False,
+        dm_policy: str = "open",
+        group_policy: str = "open",
+        allow_from: Optional[list] = None,
+        deny_message: str = "",
     ):
         super().__init__(
             process,
@@ -242,6 +298,10 @@ class TelegramChannel(BaseChannel):
             Path(media_dir).expanduser() if media_dir else _DEFAULT_MEDIA_DIR
         )
         self._show_typing = show_typing
+        self.dm_policy = dm_policy or "open"
+        self.group_policy = group_policy or "open"
+        self.allow_from = set(allow_from or [])
+        self.deny_message = deny_message or ""
         self._typing_tasks: dict[str, asyncio.Task] = {}
         self._task: Optional[asyncio.Task] = None
         self._application = None
@@ -316,6 +376,36 @@ class TelegramChannel(BaseChannel):
                 None,
             )
             sender_id = str(getattr(user, "id", "")) if user else chat_id
+            is_group = meta.get("is_group", False)
+
+            # Check allowlist before processing
+            allowed, error_msg = _check_telegram_allowlist(
+                sender_id=sender_id,
+                is_group=is_group,
+                dm_policy=self.dm_policy,
+                group_policy=self.group_policy,
+                allow_from=self.allow_from,
+                deny_message=self.deny_message,
+            )
+            if not allowed:
+                logger.info(
+                    "telegram allowlist blocked: sender_id=%s is_group=%s",
+                    sender_id,
+                    is_group,
+                )
+                # Send rejection message
+                try:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=error_msg or "You are not authorized to use this bot.",
+                    )
+                except Exception:
+                    logger.debug(
+                        "telegram allowlist rejection send failed for chat_id=%s",
+                        chat_id,
+                    )
+                return
+
             native = {
                 "channel_id": self.channel,
                 "sender_id": sender_id,
@@ -339,6 +429,12 @@ class TelegramChannel(BaseChannel):
     ) -> "TelegramChannel":
         import os
 
+        allow_from_env = os.getenv("TELEGRAM_ALLOW_FROM", "")
+        allow_from = (
+            [s.strip() for s in allow_from_env.split(",") if s.strip()]
+            if allow_from_env
+            else []
+        )
         return cls(
             process=process,
             enabled=os.getenv("TELEGRAM_CHANNEL_ENABLED", "0") == "1",
@@ -348,6 +444,10 @@ class TelegramChannel(BaseChannel):
             bot_prefix=os.getenv("TELEGRAM_BOT_PREFIX", ""),
             on_reply_sent=on_reply_sent,
             show_typing=os.getenv("TELEGRAM_SHOW_TYPING", "1") == "1",
+            dm_policy=os.getenv("TELEGRAM_DM_POLICY", "open"),
+            group_policy=os.getenv("TELEGRAM_GROUP_POLICY", "open"),
+            allow_from=allow_from,
+            deny_message=os.getenv("TELEGRAM_DENY_MESSAGE", ""),
         )
 
     @classmethod
@@ -361,10 +461,22 @@ class TelegramChannel(BaseChannel):
         filter_thinking: bool = False,
     ) -> "TelegramChannel":
         channel_show_typing = None
+        channel_dm_policy = None
+        channel_group_policy = None
+        channel_allow_from = None
+        channel_deny_message = None
         if isinstance(config, dict):
             channel_show_typing = config.get("show_typing")
+            channel_dm_policy = config.get("dm_policy")
+            channel_group_policy = config.get("group_policy")
+            channel_allow_from = config.get("allow_from")
+            channel_deny_message = config.get("deny_message")
         else:
             channel_show_typing = getattr(config, "show_typing", None)
+            channel_dm_policy = getattr(config, "dm_policy", None)
+            channel_group_policy = getattr(config, "group_policy", None)
+            channel_allow_from = getattr(config, "allow_from", None)
+            channel_deny_message = getattr(config, "deny_message", None)
 
         if isinstance(config, dict):
             bot_prefix_raw = config.get("bot_prefix")
@@ -382,6 +494,10 @@ class TelegramChannel(BaseChannel):
                 show_typing=channel_show_typing
                 if channel_show_typing is not None
                 else True,
+                dm_policy=channel_dm_policy or "open",
+                group_policy=channel_group_policy or "open",
+                allow_from=channel_allow_from or [],
+                deny_message=channel_deny_message or "",
             )
         return cls(
             process=process,
@@ -397,6 +513,10 @@ class TelegramChannel(BaseChannel):
             show_typing=channel_show_typing
             if channel_show_typing is not None
             else True,
+            dm_policy=channel_dm_policy or "open",
+            group_policy=channel_group_policy or "open",
+            allow_from=channel_allow_from or [],
+            deny_message=channel_deny_message or "",
         )
 
     def _chunk_text(self, text: str) -> list[str]:

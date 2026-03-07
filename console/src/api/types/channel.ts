@@ -42,6 +42,10 @@ export interface TelegramConfig extends BaseChannelConfig {
   http_proxy: string;
   http_proxy_auth: string;
   show_typing?: boolean;
+  dm_policy?: "open" | "allowlist";
+  group_policy?: "open" | "allowlist";
+  allow_from?: string[];
+  deny_message?: string;
 }
 
 export type ConsoleConfig = BaseChannelConfig;

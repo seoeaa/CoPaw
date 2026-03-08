@@ -3,6 +3,7 @@ import os
 from typing import Optional, Union, Dict, List, Literal
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 
+from ..providers.models import ModelSlotConfig
 from ..constant import (
     HEARTBEAT_DEFAULT_EVERY,
     HEARTBEAT_DEFAULT_TARGET,
@@ -16,6 +17,10 @@ class BaseChannelConfig(BaseModel):
     bot_prefix: str = ""
     filter_tool_messages: bool = False
     filter_thinking: bool = False
+    dm_policy: Literal["open", "allowlist"] = "open"
+    group_policy: Literal["open", "allowlist"] = "open"
+    allow_from: List[str] = Field(default_factory=list)
+    deny_message: str = ""
 
 
 class IMessageChannelConfig(BaseChannelConfig):
@@ -34,20 +39,9 @@ class DiscordConfig(BaseChannelConfig):
 
 
 class DingTalkConfig(BaseChannelConfig):
-    """DingTalk: client_id, client_secret; media_dir for received media.
-
-    Security / allowlist:
-        dm_policy    - "open" (default) or "allowlist" for direct messages
-        group_policy - "open" (default) or "allowlist" for group messages
-        allow_from   - list of sender IDs allowed when policy is "allowlist"
-    """
-
     client_id: str = ""
     client_secret: str = ""
     media_dir: str = "~/.copaw/media"
-    dm_policy: Literal["open", "allowlist"] = "open"
-    group_policy: Literal["open", "allowlist"] = "open"
-    allow_from: List[str] = Field(default_factory=list)
 
 
 class FeishuConfig(BaseChannelConfig):
@@ -69,8 +63,6 @@ class QQConfig(BaseChannelConfig):
 
 
 class TelegramConfig(BaseChannelConfig):
-    """Telegram channel: bot_token from BotFather; optional proxy."""
-
     bot_token: str = ""
     http_proxy: str = ""
     http_proxy_auth: str = ""
@@ -161,12 +153,41 @@ class AgentsRunningConfig(BaseModel):
     )
 
 
+class AgentsLLMRoutingConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = Field(default=False)
+    mode: Literal["local_first", "cloud_first"] = Field(
+        default="local_first",
+        description=(
+            "local_first routes to the local slot by default; cloud_first "
+            "routes to the cloud slot by default. Smarter switching can be "
+            "added later without changing the dual-slot config shape."
+        ),
+    )
+    local: ModelSlotConfig = Field(
+        default_factory=ModelSlotConfig,
+        description="Local model slot (required when routing is enabled).",
+    )
+    cloud: Optional[ModelSlotConfig] = Field(
+        default=None,
+        description=(
+            "Optional explicit cloud model slot; when null, uses "
+            "providers.json active_llm."
+        ),
+    )
+
+
 class AgentsConfig(BaseModel):
     defaults: AgentsDefaultsConfig = Field(
         default_factory=AgentsDefaultsConfig,
     )
     running: AgentsRunningConfig = Field(
         default_factory=AgentsRunningConfig,
+    )
+    llm_routing: AgentsLLMRoutingConfig = Field(
+        default_factory=AgentsLLMRoutingConfig,
+        description="LLM routing settings (local/cloud).",
     )
     language: str = Field(
         default="zh",

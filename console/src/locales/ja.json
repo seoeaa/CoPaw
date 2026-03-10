@@ -52,6 +52,10 @@
     "downloadFailed": "ワークスペースのダウンロードに失敗しました",
     "zipOnly": "アップロードできるのは .zip ファイルのみです",
     "fileSizeExceeded": "ファイルサイズが100MBの制限を超えています。現在のファイル: {{size}}MB",
+    "systemPromptToggleTooltip": "システムプロンプトへのファイル読み込みを有効/無効にする",
+    "memoryFileWarning": "MEMORY.md は通常、エージェントがツールを使用してオンデマンドで照会および読み込みます。システムプロンプトに読み込むと、コンテキストが長くなりすぎる可能性があります。",
+    "configUpdated": "システムプロンプト設定が更新されました",
+    "configUpdateFailed": "システムプロンプト設定の更新に失敗しました",
     "attribution": "ワークスペースの設計はOpenClawプロジェクトの一部を参考にしています — ありがとう！🐾"
   },
   "skills": {
@@ -310,7 +314,9 @@
     "of": "/",
     "selected": "選択中",
     "variable": "変数",
-    "variables": "変数"
+    "variables": "変数",
+    "showValue": "値を表示",
+    "hideValue": "値を非表示"
   },
   "models": {
     "llmConfiguration": "LLM設定",

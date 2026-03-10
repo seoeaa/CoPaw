@@ -68,7 +68,7 @@ class OpenRouterProvider(Provider):
 
         Args:
             payload: The raw API response payload
-            include_extended: If True, return ExtendedModelInfo with full metadata
+            include_extended: If True, return ExtendedModelInfo with metadata
 
         Returns:
             List of ModelInfo or ExtendedModelInfo objects
@@ -88,7 +88,7 @@ class OpenRouterProvider(Provider):
             # Extract model name (part after slash, or full ID if no slash)
             model_name = OpenRouterProvider._extract_model_name(model_id)
 
-            # If model has a name attribute, use it but prefer the extracted one
+            # Use name attr if no slash in model_id
             attr_name = str(getattr(row, "name", "") or "").strip()
             if attr_name and "/" not in model_id:
                 model_name = attr_name
@@ -105,7 +105,9 @@ class OpenRouterProvider(Provider):
                     arch_input = architecture.get("input_modalities", [])
                     arch_output = architecture.get("output_modalities", [])
                     input_modalities = list(arch_input) if arch_input else []
-                    output_modalities = list(arch_output) if arch_output else []
+                    output_modalities = (
+                        list(arch_output) if arch_output else []
+                    )
 
                     # Convert pricing to dict
                     pricing_dict = {}
@@ -179,7 +181,10 @@ class OpenRouterProvider(Provider):
         Returns:
             List of ExtendedModelInfo objects
         """
-        return await self.fetch_models(timeout=timeout, include_extended=True)  # type: ignore
+        return await self.fetch_models(
+            timeout=timeout,
+            include_extended=True,
+        )  # type: ignore
 
     def filter_models(
         self,
@@ -207,28 +212,30 @@ class OpenRouterProvider(Provider):
         if providers:
             providers_lower = [p.lower() for p in providers]
             result = [
-                m for m in result
-                if m.provider.lower() in providers_lower
+                m for m in result if m.provider.lower() in providers_lower
             ]
 
         # Filter by input modalities
         if input_modalities:
             result = [
-                m for m in result
+                m
+                for m in result
                 if any(mod in m.input_modalities for mod in input_modalities)
             ]
 
         # Filter by output modalities
         if output_modalities:
             result = [
-                m for m in result
+                m
+                for m in result
                 if any(mod in m.output_modalities for mod in output_modalities)
             ]
 
         # Filter by max prompt price
         if max_prompt_price is not None:
             result = [
-                m for m in result
+                m
+                for m in result
                 if m.pricing.get("prompt")
                 and float(m.pricing.get("prompt", "0")) <= max_prompt_price
             ]
@@ -245,14 +252,14 @@ class OpenRouterProvider(Provider):
             timeout: Request timeout in seconds
 
         Returns:
-            List of unique provider names (e.g., ["openai", "google", "anthropic"])
+            List of unique provider names (e.g., ['openai', 'google'])
         """
         models = await self.fetch_extended_models(timeout=timeout)
-        providers = set()
+        providers_set = set()
         for model in models:
             if model.provider:
-                providers.add(model.provider)
-        return sorted(list(providers))
+                providers_set.add(model.provider)
+        return sorted(list(providers_set))
 
     async def check_model_connection(
         self,

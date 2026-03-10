@@ -255,7 +255,7 @@ async def discover_models(
         try:
             # Check if we should fetch extended info (for OpenRouter)
             include_extended = body.include_extended if body else False
-            
+
             # For OpenRouter, use fetch_extended_models if requested
             if provider_id == "openrouter" and include_extended:
                 provider = manager.get_provider(provider_id)
@@ -267,6 +267,7 @@ async def discover_models(
                             model,
                             target="extra_models",
                         )
+                    # pylint: disable=protected-access
                     manager._save_provider(
                         provider,
                         is_builtin=True,
@@ -419,6 +420,7 @@ async def set_active_model(
 
 class FilterModelsRequest(BaseModel):
     """Request model for filtering OpenRouter models."""
+
     providers: List[str] = Field(
         default_factory=list,
         description="Filter by provider/series (e.g., ['openai', 'google'])",
@@ -439,14 +441,16 @@ class FilterModelsRequest(BaseModel):
 
 class SeriesResponse(BaseModel):
     """Response model for available series/providers."""
+
     series: List[str] = Field(
         default_factory=list,
-        description="List of available provider series (e.g., ['openai', 'google'])",
+        description="Provider series (e.g., ['openai', 'google'])",
     )
 
 
 class DiscoverExtendedResponse(BaseModel):
     """Response model for extended model discovery."""
+
     success: bool = Field(..., description="Whether discovery succeeded")
     models: List[dict] = Field(
         default_factory=list,
@@ -464,6 +468,7 @@ class DiscoverExtendedResponse(BaseModel):
 
 class FilterModelsResponse(BaseModel):
     """Response model for filtered models."""
+
     success: bool = Field(..., description="Whether filtering succeeded")
     models: List[dict] = Field(
         default_factory=list,
@@ -589,7 +594,7 @@ async def filter_openrouter_models(
 
     This endpoint fetches models and applies the specified filters:
     - providers: Filter by provider/series (e.g., ['openai', 'google'])
-    - input_modalities: Required input types (e.g., ['image'] for vision models)
+    - input_modalities: Required input types (e.g., ['image'])
     - output_modalities: Required output types (e.g., ['text'])
     - max_prompt_price: Maximum price per 1M input tokens
     """
@@ -646,4 +651,3 @@ async def filter_openrouter_models(
             status_code=500,
             detail=f"Failed to filter models: {str(exc)}",
         ) from exc
-

@@ -86,6 +86,11 @@ AZURE_OPENAI_MODELS: List[ModelInfo] = [
     ModelInfo(id="gpt-4o-mini", name="GPT-4o Mini"),
 ]
 
+MINIMAX_MODELS: List[ModelInfo] = [
+    ModelInfo(id="MiniMax-M2.5", name="MiniMax M2.5"),
+    ModelInfo(id="MiniMax-M2.5-highspeed", name="MiniMax M2.5 Highspeed"),
+]
+
 ANTHROPIC_MODELS: List[ModelInfo] = []
 
 # OpenRouter models are fetched dynamically - no hardcoded list
@@ -148,6 +153,16 @@ PROVIDER_AZURE_OPENAI = OpenAIProvider(
     models=AZURE_OPENAI_MODELS,
 )
 
+PROVIDER_MINIMAX = OpenAIProvider(
+    id="minimax",
+    name="MiniMax",
+    base_url="https://api.minimax.io/v1",
+    api_key_prefix="eyJ",
+    models=MINIMAX_MODELS,
+    freeze_url=True,
+    generate_kwargs={"temperature": 1.0},
+)
+
 PROVIDER_ANTHROPIC = AnthropicProvider(
     id="anthropic",
     name="Anthropic",
@@ -172,6 +187,7 @@ PROVIDER_OLLAMA = OllamaProvider(
     name="Ollama",
     require_api_key=False,
     support_model_discovery=True,
+    generate_kwargs={"max_tokens": None},
 )
 
 PROVIDER_LMSTUDIO = OpenAIProvider(
@@ -181,6 +197,7 @@ PROVIDER_LMSTUDIO = OpenAIProvider(
     require_api_key=False,
     api_key_prefix="",
     support_model_discovery=True,
+    generate_kwargs={"max_tokens": None},
 )
 
 
@@ -238,6 +255,7 @@ class ProviderManager:
         self._add_builtin(PROVIDER_ALIYUN_CODINGPLAN)
         self._add_builtin(PROVIDER_OPENAI)
         self._add_builtin(PROVIDER_AZURE_OPENAI)
+        self._add_builtin(PROVIDER_MINIMAX)
         self._add_builtin(PROVIDER_ANTHROPIC)
         self._add_builtin(PROVIDER_OPENROUTER)
         self._add_builtin(PROVIDER_OLLAMA)
@@ -300,7 +318,7 @@ class ProviderManager:
             return []
         try:
             models = await provider.fetch_models()
-            provider.models = models
+            provider.extra_models = models
             self._save_provider(
                 provider,
                 is_builtin=provider_id in self.builtin_providers,
@@ -452,7 +470,7 @@ class ProviderManager:
             return OpenRouterProvider.model_validate(data)
         if provider_id == "anthropic" or chat_model == "AnthropicChatModel":
             return AnthropicProvider.model_validate(data)
-        if provider_id == "ollama" or chat_model == "OllamaChatModel":
+        if provider_id == "ollama":
             return OllamaProvider.model_validate(data)
         if data.get("is_local", False):
             return DefaultProvider.model_validate(data)
@@ -560,7 +578,7 @@ class ProviderManager:
                 builtin.base_url = provider.base_url
                 builtin.api_key = provider.api_key
                 builtin.extra_models = provider.extra_models
-                builtin.generate_kwargs = provider.generate_kwargs
+                builtin.generate_kwargs.update(provider.generate_kwargs)
         # Load custom providers
         for provider_file in self.custom_path.glob("*.json"):
             provider = self.load_provider(provider_file.stem, is_builtin=False)

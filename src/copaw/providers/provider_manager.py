@@ -9,7 +9,7 @@ from typing import Dict, List
 import logging
 import json
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from agentscope.model import ChatModelBase
 
@@ -19,8 +19,10 @@ from copaw.providers.provider import (
     Provider,
     ProviderInfo,
 )
+from copaw.providers.models import ModelSlotConfig
 from copaw.providers.openai_provider import OpenAIProvider
 from copaw.providers.anthropic_provider import AnthropicProvider
+from copaw.providers.gemini_provider import GeminiProvider
 from copaw.providers.ollama_provider import OllamaProvider
 from copaw.providers.openrouter_provider import OpenRouterProvider
 from copaw.constant import SECRET_DIR
@@ -98,8 +100,18 @@ DEEPSEEK_MODELS: List[ModelInfo] = [
 
 ANTHROPIC_MODELS: List[ModelInfo] = []
 
-# OpenRouter models are fetched dynamically - no hardcoded list
-OPENROUTER_MODELS: List[ModelInfo] = []
+GEMINI_MODELS: List[ModelInfo] = [
+    ModelInfo(id="gemini-3.1-pro-preview", name="Gemini 3.1 Pro Preview"),
+    ModelInfo(id="gemini-3-flash-preview", name="Gemini 3 Flash Preview"),
+    ModelInfo(
+        id="gemini-3.1-flash-lite-preview",
+        name="Gemini 3.1 Flash Lite Preview",
+    ),
+    ModelInfo(id="gemini-2.5-pro", name="Gemini 2.5 Pro"),
+    ModelInfo(id="gemini-2.5-flash", name="Gemini 2.5 Flash"),
+    ModelInfo(id="gemini-2.5-flash-lite", name="Gemini 2.5 Flash Lite"),
+    ModelInfo(id="gemini-2.0-flash", name="Gemini 2.0 Flash"),
+]
 
 PROVIDER_MODELSCOPE = OpenAIProvider(
     id="modelscope",
@@ -187,13 +199,15 @@ PROVIDER_ANTHROPIC = AnthropicProvider(
     freeze_url=True,
 )
 
-PROVIDER_OPENROUTER = OpenRouterProvider(
-    id="openrouter",
-    name="OpenRouter",
-    base_url="https://openrouter.ai/api/v1",
-    api_key_prefix="sk-or-v1-",
-    models=OPENROUTER_MODELS,
+PROVIDER_GEMINI = GeminiProvider(
+    id="gemini",
+    name="Google Gemini",
+    base_url="https://generativelanguage.googleapis.com",
+    api_key_prefix="",
+    models=GEMINI_MODELS,
+    chat_model="GeminiChatModel",
     freeze_url=True,
+    support_model_discovery=True,
 )
 
 PROVIDER_OLLAMA = OllamaProvider(
@@ -213,17 +227,6 @@ PROVIDER_LMSTUDIO = OpenAIProvider(
     support_model_discovery=True,
     generate_kwargs={"max_tokens": None},
 )
-
-
-class ModelSlotConfig(BaseModel):
-    provider_id: str = Field(
-        ...,
-        description="ID of the provider to use for this model slot",
-    )
-    model: str = Field(
-        ...,
-        description="ID of the model to use for this model slot",
-    )
 
 
 class ActiveModelsInfo(BaseModel):
@@ -272,7 +275,7 @@ class ProviderManager:
         self._add_builtin(PROVIDER_MINIMAX)
         self._add_builtin(PROVIDER_DEEPSEEK)
         self._add_builtin(PROVIDER_ANTHROPIC)
-        self._add_builtin(PROVIDER_OPENROUTER)
+        self._add_builtin(PROVIDER_GEMINI)
         self._add_builtin(PROVIDER_OLLAMA)
         self._add_builtin(PROVIDER_LMSTUDIO)
         self._add_builtin(PROVIDER_LLAMACPP)
@@ -485,6 +488,8 @@ class ProviderManager:
             return OpenRouterProvider.model_validate(data)
         if provider_id == "anthropic" or chat_model == "AnthropicChatModel":
             return AnthropicProvider.model_validate(data)
+        if provider_id == "gemini" or chat_model == "GeminiChatModel":
+            return GeminiProvider.model_validate(data)
         if provider_id == "ollama":
             return OllamaProvider.model_validate(data)
         if data.get("is_local", False):

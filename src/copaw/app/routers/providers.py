@@ -14,6 +14,7 @@ from ..agent_context import get_agent_for_request
 from ...config.config import load_agent_config, save_agent_config
 from ...providers.provider import ProviderInfo, ModelInfo
 from ...providers.provider_manager import ActiveModelsInfo, ProviderManager
+from ...providers.openrouter_provider import OpenRouterProvider
 from ...providers.models import ModelSlotConfig
 
 

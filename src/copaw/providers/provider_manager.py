@@ -218,6 +218,16 @@ PROVIDER_OLLAMA = OllamaProvider(
     generate_kwargs={"max_tokens": None},
 )
 
+PROVIDER_OPENROUTER = OpenRouterProvider(
+    id="openrouter",
+    name="OpenRouter",
+    base_url="https://openrouter.ai/api/v1",
+    api_key_prefix="sk-or-v1-",
+    models=[],
+    freeze_url=True,
+    support_model_discovery=True,
+)
+
 PROVIDER_LMSTUDIO = OpenAIProvider(
     id="lmstudio",
     name="LM Studio",
@@ -277,6 +287,7 @@ class ProviderManager:
         self._add_builtin(PROVIDER_ANTHROPIC)
         self._add_builtin(PROVIDER_GEMINI)
         self._add_builtin(PROVIDER_OLLAMA)
+        self._add_builtin(PROVIDER_OPENROUTER)
         self._add_builtin(PROVIDER_LMSTUDIO)
         self._add_builtin(PROVIDER_LLAMACPP)
         self._add_builtin(PROVIDER_MLX)

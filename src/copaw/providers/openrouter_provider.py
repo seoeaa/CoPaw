@@ -131,14 +131,14 @@ class OpenRouterProvider(Provider):
 
         return list(models.values())
 
-    async def check_connection(self, timeout: float = 30) -> bool:
+    async def check_connection(self, timeout: float = 30) -> tuple[bool, str]:
         """Check if OpenRouter provider is reachable."""
         client = self._client()
         try:
             await client.models.list(timeout=timeout)
-            return True
-        except APIError:
-            return False
+            return True, ""
+        except APIError as e:
+            return False, str(e)
 
     async def fetch_models(
         self,
@@ -265,7 +265,7 @@ class OpenRouterProvider(Provider):
         self,
         model_id: str,
         timeout: float = 30,
-    ) -> bool:
+    ) -> tuple[bool, str]:
         """Check if a specific model is reachable/usable"""
         try:
             client = self._client(timeout=timeout)
@@ -279,9 +279,9 @@ class OpenRouterProvider(Provider):
             # consume the stream to ensure the model is actually responsive
             async for _ in res:
                 break
-            return True
-        except APIError:
-            return False
+            return True, ""
+        except APIError as e:
+            return False, str(e)
 
     def get_chat_model_instance(self, model_id: str) -> ChatModelBase:
         from .openai_chat_model_compat import OpenAIChatModelCompat

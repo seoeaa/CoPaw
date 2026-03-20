@@ -120,20 +120,7 @@ class CoPawAgent(ToolGuardMixin, ReActAgent):
 
         # Extract configuration from agent_config
         running_config = agent_config.running
-        self._max_input_length = running_config.max_input_length
         self._language = agent_config.language
-
-        # Memory compaction settings from config
-        self._memory_compact_threshold = (
-            running_config.memory_compact_threshold
-        )
-        self._memory_compact_reserve = running_config.memory_compact_reserve
-        self._enable_tool_result_compact = (
-            running_config.enable_tool_result_compact
-        )
-        self._tool_result_compact_keep_n = (
-            running_config.tool_result_compact_keep_n
-        )
 
         # Initialize toolkit with built-in tools
         toolkit = self._create_toolkit(namesake_strategy=namesake_strategy)
@@ -280,10 +267,20 @@ class CoPawAgent(ToolGuardMixin, ReActAgent):
             else None
         )
 
+        # Check if heartbeat is enabled in agent config
+        heartbeat_enabled = False
+        if (
+            hasattr(self._agent_config, "heartbeat")
+            and self._agent_config.heartbeat is not None
+        ):
+            heartbeat_enabled = self._agent_config.heartbeat.enabled
+
         sys_prompt = build_system_prompt_from_working_dir(
             working_dir=self._workspace_dir,
             agent_id=agent_id,
+            heartbeat_enabled=heartbeat_enabled,
         )
+        logger.debug("System prompt:\n%s", sys_prompt)
         if self._env_context is not None:
             sys_prompt = sys_prompt + "\n\n" + self._env_context
         return sys_prompt

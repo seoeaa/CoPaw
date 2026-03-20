@@ -16,7 +16,6 @@ from agentscope.tool import ToolResponse
 
 from ...constant import WORKING_DIR
 from ...config.context import get_current_workspace_dir
-from .utils import truncate_shell_output
 
 
 def _kill_process_tree_win32(pid: int) -> None:
@@ -69,11 +68,7 @@ def _execute_subprocess_sync(
             return code will be -1 and stderr will contain timeout information.
     """
     try:
-        # Disable cmd.exe AutoRun (/D) to prevent spurious stderr
-        # from registry-configured startup scripts (e.g. "The system
-        # cannot find the path specified.").  /S prevents quote stripping
-        # so the inner command is passed through unchanged.
-        wrapped = ["cmd", "/D", "/S", "/C", cmd]
+        wrapped = f'cmd /D /S /C "{cmd}"'
         with subprocess.Popen(
             wrapped,
             shell=False,
@@ -243,8 +238,8 @@ async def execute_shell_command(
                     stderr_str = stderr_suffix
 
         # Apply output truncation
-        stdout_str = truncate_shell_output(stdout_str)
-        stderr_str = truncate_shell_output(stderr_str)
+        # stdout_str = truncate_shell_output(stdout_str)
+        # stderr_str = truncate_shell_output(stderr_str)
 
         # Format the response in a human-friendly way
         if returncode == 0:

@@ -16,7 +16,7 @@ By default, all config and data live in one folder — the **working directory**
 
 - **`~/.copaw`** (the `.copaw` folder under your home directory)
 
-Starting from **v0.1.0**, CoPaw supports **multi-agent workspace**. When you run `copaw init`, the new structure looks like:
+Starting from **v0.1.0**, CoPaw supports **multi-agent**. When you run `copaw init`, the new structure looks like:
 
 ```
 ~/.copaw/
@@ -28,11 +28,14 @@ Starting from **v0.1.0**, CoPaw supports **multi-agent workspace**. When you run
     │   ├── jobs.json        # Cron jobs
     │   ├── AGENTS.md        # Detailed workflows, rules, and guidelines
     │   ├── SOUL.md          # Core identity and behavioral principles
-    │   ├── active_skills/   # Enabled skills
-    │   ├── customized_skills/ # Custom skills
+    │   ├── skills/          # Workspace-local skills
+    │   ├── skill.json       # Per-workspace skill state
     │   └── memory/          # Memory files
     └── abc123/              # Other agent workspace
         └── ...
+├── skill_pool/              # Local shared skill pool
+│   ├── skill.json           # Pool metadata
+│   └── ...
 ```
 
 ### Directory Explanation
@@ -46,17 +49,18 @@ Starting from **v0.1.0**, CoPaw supports **multi-agent workspace**. When you run
 
 **Agent Workspace (`~/.copaw/workspaces/{agent_id}/`)**
 
-| File / Directory     | Purpose                                                      |
-| -------------------- | ------------------------------------------------------------ |
-| `agent.json`         | Agent config (channels, heartbeat, tools, skills, MCP, etc.) |
-| `chats.json`         | Conversation history                                         |
-| `jobs.json`          | Cron job list                                                |
-| `token_usage.json`   | Token usage records                                          |
-| `AGENTS.md`          | _(required)_ Detailed workflows, rules, and guidelines       |
-| `SOUL.md`            | _(required)_ Core identity and behavioral principles         |
-| `active_skills/`     | Currently enabled skills                                     |
-| `customized_skills/` | User-created custom skills                                   |
-| `memory/`            | Memory files (auto-managed)                                  |
+| File / Directory   | Purpose                                                      |
+| ------------------ | ------------------------------------------------------------ |
+| `agent.json`       | Agent config (channels, heartbeat, tools, skills, MCP, etc.) |
+| `chats.json`       | Conversation history                                         |
+| `jobs.json`        | Cron job list                                                |
+| `token_usage.json` | Token usage records                                          |
+| `AGENTS.md`        | _(required)_ Detailed workflows, rules, and guidelines       |
+| `SOUL.md`          | _(required)_ Core identity and behavioral principles         |
+| `skills/`          | Skills available in this workspace                           |
+| `skill.json`       | Per-workspace enabled state, channels, and skill metadata    |
+| `memory/`          | Memory files (auto-managed)                                  |
+| `browser/`         | Browser user data (cookies, cache, localStorage, etc.)       |
 
 > **Tip:** `SOUL.md` and `AGENTS.md` are the minimum required Markdown files
 > for the agent's system prompt. Without them, the agent falls back to a
@@ -64,7 +68,7 @@ Starting from **v0.1.0**, CoPaw supports **multi-agent workspace**. When you run
 > them based on your language choice (`zh` / `en` / `ru`). You can also
 > change the language later via the Console (Agent → Configuration).
 
-> **Multi-Agent Workspace:** See the [Multi-Agent Workspace](./multi-agent) documentation for details.
+> **Multi-Agent:** See the [Multi-Agent](./multi-agent) documentation for details.
 
 ---
 
@@ -161,6 +165,10 @@ automatically use defaults.
     },
     "running": {
       "max_iters": 50,
+      "llm_retry_enabled": true,
+      "llm_max_retries": 3,
+      "llm_backoff_base": 1.0,
+      "llm_backoff_cap": 10.0,
       "max_input_length": 131072
     },
     "language": "zh",
@@ -276,10 +284,18 @@ Each agent's detailed configuration is stored in `~/.copaw/workspaces/{agent_id}
 
 **`agents.running`** — Agent runtime behavior
 
-| Field              | Type | Default         | Description                                                                                                              |
-| ------------------ | ---- | --------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `max_iters`        | int  | `50`            | Maximum number of reasoning-acting iterations for ReAct agent (must be ≥ 1)                                              |
-| `max_input_length` | int  | `131072` (128K) | Maximum input length (tokens) for model context window. Memory compaction triggers at 80% of this value (must be ≥ 1000) |
+| Field               | Type  | Default         | Description                                                                                                              |
+| ------------------- | ----- | --------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `max_iters`         | int   | `50`            | Maximum number of reasoning-acting iterations for ReAct agent (must be ≥ 1)                                              |
+| `llm_retry_enabled` | bool  | `true`          | Whether to auto-retry transient LLM API failures such as rate limits, timeouts, and connection errors                    |
+| `llm_max_retries`   | int   | `3`             | Maximum retry attempts for transient LLM API failures. Use together with `llm_retry_enabled`; must be ≥ 1                |
+| `llm_backoff_base`  | float | `1.0`           | Base delay in seconds for exponential retry backoff (must be ≥ 0.1)                                                      |
+| `llm_backoff_cap`   | float | `10.0`          | Maximum backoff delay cap in seconds (must be ≥ 0.5 and greater than or equal to `llm_backoff_base`)                     |
+| `max_input_length`  | int   | `131072` (128K) | Maximum input length (tokens) for model context window. Memory compaction triggers at 80% of this value (must be ≥ 1000) |
+
+These retry settings can also be changed in the Console under
+**Agent → Configuration**. Changes apply to new LLM requests after saving;
+restarting the service is not required.
 
 **`agents.defaults.heartbeat`** — Heartbeat scheduling
 
@@ -416,16 +432,22 @@ can read them via `os.environ`.
 
 ## Skills
 
-Skills extend the agent's capabilities. They live in three directories:
+Skills extend the agent's capabilities. In the current model they live in two places:
 
-| Directory                     | Purpose                                                             |
-| ----------------------------- | ------------------------------------------------------------------- |
-| Built-in (in source code)     | Shipped with CoPaw — docx, pdf, pptx, xlsx, news, email, cron, etc. |
-| `~/.copaw/customized_skills/` | User-created skills                                                 |
-| `~/.copaw/active_skills/`     | Currently active skills (synced from built-in + customized)         |
+| Directory                                | Purpose                                                             |
+| ---------------------------------------- | ------------------------------------------------------------------- |
+| Built-in (in source code)                | Shipped with CoPaw — docx, pdf, pptx, xlsx, news, email, cron, etc. |
+| `~/.copaw/skill_pool/`                   | Local shared pool for built-ins and shared skills                   |
+| `~/.copaw/workspaces/{agent_id}/skills/` | Skills present in one workspace                                     |
 
 Each skill is a directory with a `SKILL.md` file (YAML front matter with `name`
 and `description`), and optional `references/` and `scripts/` subdirectories.
+Skills may also declare `metadata.requires.bins` and `metadata.requires.env`;
+CoPaw surfaces those as `require_bins` and `require_envs` metadata instead of
+using them as a hard enable/disable gate.
+
+Whether a workspace skill is active is controlled by
+`~/.copaw/workspaces/{agent_id}/skill.json`.
 
 Manage skills via:
 
@@ -488,7 +510,7 @@ Recommended to configure in `agent.json` under `running.embedding_config`, which
 - [Introduction](./intro) — What the project can do
 - [Channels](./channels) — How to fill in channels in config
 - [Heartbeat](./heartbeat) — How to fill in heartbeat in config
-- [Multi-Agent Workspace](./multi-agent) — Multi-agent setup and management
+- [Multi-Agent](./multi-agent) — Multi-agent setup, management, and collaboration
 
 ---
 

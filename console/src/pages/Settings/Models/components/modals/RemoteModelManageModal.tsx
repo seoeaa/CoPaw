@@ -14,6 +14,7 @@ import {
   PlusOutlined,
   ApiOutlined,
   SyncOutlined,
+  EyeOutlined,
   FilterOutlined,
   ClearOutlined,
 } from "@ant-design/icons";
@@ -28,6 +29,7 @@ import {
 import type { ProviderInfo, SeriesResponse } from "../../../../../api/types";
 import api from "../../../../../api";
 import { useTranslation } from "react-i18next";
+import { useTheme } from "../../../../../contexts/ThemeContext";
 import styles from "../../index.module.less";
 
 interface RemoteModelManageModalProps {
@@ -44,10 +46,12 @@ export function RemoteModelManageModal({
   onSaved,
 }: RemoteModelManageModalProps) {
   const { t } = useTranslation();
+  const { isDark } = useTheme();
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
   const [discovering, setDiscovering] = useState(false);
   const [testingModelId, setTestingModelId] = useState<string | null>(null);
+  const [probingModelId, setProbingModelId] = useState<string | null>(null);
   const [form] = Form.useForm();
 
   // OpenRouter filter state
@@ -61,68 +65,7 @@ export function RemoteModelManageModal({
   >(null);
   const [loadingFilters, setLoadingFilters] = useState(false);
 
-  // Enable discover for providers that support it
-  // Use support_model_discovery field from ProviderInfo
   const canDiscover = provider.support_model_discovery;
-
-  // Load available series for OpenRouter
-  useEffect(() => {
-    if (isOpenRouter && canDiscover) {
-      api
-        .getOpenRouterSeries()
-        .then((res: SeriesResponse) => {
-          setAvailableSeries(res.series || []);
-        })
-        .catch(() => {
-          setAvailableSeries([]);
-        });
-    }
-  }, [isOpenRouter, canDiscover]);
-
-  // Fetch models with current filters
-  const handleFetchModels = async () => {
-    if (!isOpenRouter) return;
-
-    setLoadingFilters(true);
-    try {
-      const filterBody: Record<string, any> = {};
-      if (selectedSeries.length > 0) {
-        filterBody.providers = selectedSeries;
-      }
-      if (selectedInputModality) {
-        filterBody.input_modalities = [selectedInputModality];
-      }
-
-      const result = await api.filterOpenRouterModels(filterBody);
-      if (result.success) {
-        setDiscoveredModels(result.models || []);
-        message.success(
-          t("models.filteredModelsLoaded", { count: result.total_count }),
-        );
-      } else {
-        message.error(t("models.filterFailed"));
-      }
-    } catch {
-      message.error(t("models.filterFailed"));
-    } finally {
-      setLoadingFilters(false);
-    }
-  };
-
-  const handleAddFilteredModel = async (model: any) => {
-    setSaving(true);
-    try {
-      await api.addModel(provider.id, { id: model.id, name: model.name });
-      message.success(t("models.modelAdded", { name: model.name }));
-      await onSaved();
-      // Remove from discovered list
-      setDiscoveredModels((prev) => prev.filter((m) => m.id !== model.id));
-    } catch {
-      message.error(t("models.modelAddFailed"));
-    } finally {
-      setSaving(false);
-    }
-  };
 
   // For custom providers ALL models are deletable.
   // For built-in providers only extra_models are deletable.
@@ -210,6 +153,35 @@ export function RemoteModelManageModal({
     }
   };
 
+  const handleProbeMultimodal = async (modelId: string) => {
+    setProbingModelId(modelId);
+    try {
+      const result = await api.probeMultimodal(provider.id, modelId);
+      const parts: string[] = [];
+      if (result.supports_image) parts.push(t("models.probeImage", "图片"));
+      if (result.supports_video) parts.push(t("models.probeVideo", "视频"));
+      if (parts.length > 0) {
+        message.success(
+          t("models.probeSupported", {
+            types: parts.join(", "),
+            defaultValue: `支持: ${parts.join(", ")}`,
+          }),
+        );
+      } else {
+        message.info(t("models.probeNotSupported", "该模型不支持多模态输入"));
+      }
+      await onSaved();
+    } catch (error) {
+      const errMsg =
+        error instanceof Error
+          ? error.message
+          : t("models.probeFailed", "探测失败");
+      message.error(errMsg);
+    } finally {
+      setProbingModelId(null);
+    }
+  };
+
   const handleRemoveModel = (modelId: string, modelName: string) => {
     Modal.confirm({
       title: t("models.removeModel"),
@@ -234,6 +206,70 @@ export function RemoteModelManageModal({
         }
       },
     });
+  };
+
+  const handleClose = () => {
+    setAdding(false);
+    form.resetFields();
+    onClose();
+  };
+
+  // Load available series for OpenRouter
+  useEffect(() => {
+    if (isOpenRouter && canDiscover) {
+      api
+        .getOpenRouterSeries()
+        .then((res: SeriesResponse) => {
+          setAvailableSeries(res.series || []);
+        })
+        .catch(() => {
+          setAvailableSeries([]);
+        });
+    }
+  }, [isOpenRouter, canDiscover]);
+
+  // Fetch models with current filters
+  const handleFetchModels = async () => {
+    if (!isOpenRouter) return;
+
+    setLoadingFilters(true);
+    try {
+      const filterBody: Record<string, any> = {};
+      if (selectedSeries.length > 0) {
+        filterBody.providers = selectedSeries;
+      }
+      if (selectedInputModality) {
+        filterBody.input_modalities = [selectedInputModality];
+      }
+
+      const result = await api.filterOpenRouterModels(filterBody);
+      if (result.success) {
+        setDiscoveredModels(result.models || []);
+        message.success(
+          t("models.filteredModelsLoaded", { count: result.total_count }),
+        );
+      } else {
+        message.error(t("models.filterFailed"));
+      }
+    } catch {
+      message.error(t("models.filterFailed"));
+    } finally {
+      setLoadingFilters(false);
+    }
+  };
+
+  const handleAddFilteredModel = async (model: any) => {
+    setSaving(true);
+    try {
+      await api.addModel(provider.id, { id: model.id, name: model.name });
+      message.success(t("models.modelAdded", { name: model.name }));
+      await onSaved();
+      setDiscoveredModels((prev) => prev.filter((m) => m.id !== model.id));
+    } catch {
+      message.error(t("models.modelAddFailed"));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleClearAllModels = () => {
@@ -269,12 +305,6 @@ export function RemoteModelManageModal({
         }
       },
     });
-  };
-
-  const handleClose = () => {
-    setAdding(false);
-    form.resetFields();
-    onClose();
   };
 
   const handleDiscoverModels = async () => {
@@ -367,7 +397,7 @@ export function RemoteModelManageModal({
                 </Button>
               ) : null,
             children: (
-              <>
+              <div className={styles.modelList}>
                 {all_models.length === 0 ? (
                   <div className={styles.modelListEmpty}>
                     {t("models.noModels")}
@@ -375,17 +405,44 @@ export function RemoteModelManageModal({
                 ) : (
                   all_models.map((m) => {
                     const isDeletable = extraModelIds.has(m.id);
-                    // Check if it's an extended model (has input_modalities)
                     const hasExtendedInfo = (m as any).input_modalities;
                     return (
                       <div key={m.id} className={styles.modelListItem}>
                         <div className={styles.modelListItemInfo}>
                           <span className={styles.modelListItemName}>
                             {m.name}
+                            {m.supports_image === true && (
+                              <Tag
+                                color="blue"
+                                style={{ fontSize: 11, marginLeft: 6 }}
+                              >
+                                {t("models.tagImage", "图片")}
+                              </Tag>
+                            )}
+                            {m.supports_video === true && (
+                              <Tag
+                                color="purple"
+                                style={{ fontSize: 11, marginLeft: 4 }}
+                              >
+                                {t("models.tagVideo", "视频")}
+                              </Tag>
+                            )}
+                            {m.supports_multimodal === false && (
+                              <Tag style={{ fontSize: 11, marginLeft: 6 }}>
+                                {t("models.tagTextOnly", "纯文本")}
+                              </Tag>
+                            )}
+                            {m.supports_multimodal === null && (
+                              <Tag
+                                color="default"
+                                style={{ fontSize: 11, marginLeft: 6 }}
+                              >
+                                {t("models.tagNotProbed", "未检测")}
+                              </Tag>
+                            )}
                           </span>
                           <span className={styles.modelListItemId}>
                             {m.id}
-                            {/* Show modalities and price for extended models */}
                             {hasExtendedInfo && (
                               <span
                                 style={{
@@ -399,7 +456,9 @@ export function RemoteModelManageModal({
                               >
                                 {(m as any).input_modalities?.includes(
                                   "text",
-                                ) && <SparkTextLine style={{ fontSize: 12 }} />}
+                                ) && (
+                                  <SparkTextLine style={{ fontSize: 12 }} />
+                                )}
                                 {(m as any).input_modalities?.includes(
                                   "image",
                                 ) && (
@@ -424,7 +483,9 @@ export function RemoteModelManageModal({
                                 {(m as any).input_modalities?.includes(
                                   "file",
                                 ) && (
-                                  <SparkFilePdfLine style={{ fontSize: 12 }} />
+                                  <SparkFilePdfLine
+                                    style={{ fontSize: 12 }}
+                                  />
                                 )}
                                 {(m as any).output_modalities?.includes(
                                   "image",
@@ -439,7 +500,9 @@ export function RemoteModelManageModal({
                                   >
                                     $
                                     {(
-                                      (m as any).pricing.prompt * 1_000_000
+                                      parseFloat(
+                                        (m as any).pricing.prompt,
+                                      ) * 1_000_000
                                     ).toFixed(2)}
                                     /1M in
                                     {(m as any).pricing.completion && (
@@ -447,8 +510,9 @@ export function RemoteModelManageModal({
                                         {" "}
                                         · $
                                         {(
-                                          (m as any).pricing.completion *
-                                          1_000_000
+                                          parseFloat(
+                                            (m as any).pricing.completion,
+                                          ) * 1_000_000
                                         ).toFixed(2)}
                                         /1M out
                                       </span>
@@ -471,10 +535,30 @@ export function RemoteModelManageModal({
                               <Button
                                 type="text"
                                 size="small"
+                                icon={<EyeOutlined />}
+                                onClick={() => handleProbeMultimodal(m.id)}
+                                loading={probingModelId === m.id}
+                                style={{
+                                  marginRight: 4,
+                                  color: isDark
+                                    ? "rgba(255,255,255,0.65)"
+                                    : undefined,
+                                }}
+                              >
+                                {t("models.probeMultimodal", "测试多模态")}
+                              </Button>
+                              <Button
+                                type="text"
+                                size="small"
                                 icon={<ApiOutlined />}
                                 onClick={() => handleTestModel(m.id)}
                                 loading={testingModelId === m.id}
-                                style={{ marginRight: 4 }}
+                                style={{
+                                  marginRight: 4,
+                                  color: isDark
+                                    ? "rgba(255,255,255,0.65)"
+                                    : undefined,
+                                }}
                               >
                                 {t("models.testConnection")}
                               </Button>
@@ -483,7 +567,9 @@ export function RemoteModelManageModal({
                                 size="small"
                                 danger
                                 icon={<DeleteOutlined />}
-                                onClick={() => handleRemoveModel(m.id, m.name)}
+                                onClick={() =>
+                                  handleRemoveModel(m.id, m.name)
+                                }
                               />
                             </>
                           ) : (
@@ -497,9 +583,29 @@ export function RemoteModelManageModal({
                               <Button
                                 type="text"
                                 size="small"
+                                icon={<EyeOutlined />}
+                                onClick={() => handleProbeMultimodal(m.id)}
+                                loading={probingModelId === m.id}
+                                style={{
+                                  marginRight: 4,
+                                  color: isDark
+                                    ? "rgba(255,255,255,0.65)"
+                                    : undefined,
+                                }}
+                              >
+                                {t("models.probeMultimodal", "测试多模态")}
+                              </Button>
+                              <Button
+                                type="text"
+                                size="small"
                                 icon={<ApiOutlined />}
                                 onClick={() => handleTestModel(m.id)}
                                 loading={testingModelId === m.id}
+                                style={{
+                                  color: isDark
+                                    ? "rgba(255,255,255,0.65)"
+                                    : undefined,
+                                }}
                               >
                                 {t("models.testConnection")}
                               </Button>
@@ -510,7 +616,7 @@ export function RemoteModelManageModal({
                     );
                   })
                 )}
-              </>
+              </div>
             ),
           },
         ]}
@@ -542,7 +648,10 @@ export function RemoteModelManageModal({
                   {t("models.filterByProvider") || "Provider:"}
                 </div>
                 <Checkbox.Group
-                  options={availableSeries.map((s) => ({ label: s, value: s }))}
+                  options={availableSeries.map((s) => ({
+                    label: s,
+                    value: s,
+                  }))}
                   value={selectedSeries}
                   onChange={(vals) => setSelectedSeries(vals as string[])}
                   style={{ display: "flex", flexWrap: "wrap", gap: 8 }}
@@ -597,7 +706,9 @@ export function RemoteModelManageModal({
                       value: "text",
                     },
                   ]}
-                  value={selectedInputModality ? [selectedInputModality] : []}
+                  value={
+                    selectedInputModality ? [selectedInputModality] : []
+                  }
                   onChange={(vals) =>
                     setSelectedInputModality(
                       vals.length > 0 ? (vals[0] as string) : null,
@@ -621,7 +732,11 @@ export function RemoteModelManageModal({
               {/* Discovered Models List */}
               {discoveredModels.length > 0 && (
                 <div
-                  style={{ marginTop: 12, maxHeight: 200, overflowY: "auto" }}
+                  style={{
+                    marginTop: 12,
+                    maxHeight: 200,
+                    overflowY: "auto",
+                  }}
                 >
                   <div style={{ fontWeight: 500, marginBottom: 4 }}>
                     {t("models.discovered") || "Available Models:"}
@@ -651,18 +766,23 @@ export function RemoteModelManageModal({
                           }}
                         >
                           <span>{model.provider}</span>
-                          {/* Input modalities icons */}
                           {model.input_modalities?.includes("text") && (
                             <SparkTextLine style={{ fontSize: 12 }} />
                           )}
                           {model.input_modalities?.includes("image") && (
-                            <SparkImageuploadLine style={{ fontSize: 12 }} />
+                            <SparkImageuploadLine
+                              style={{ fontSize: 12 }}
+                            />
                           )}
                           {model.input_modalities?.includes("audio") && (
-                            <SparkAudiouploadLine style={{ fontSize: 12 }} />
+                            <SparkAudiouploadLine
+                              style={{ fontSize: 12 }}
+                            />
                           )}
                           {model.input_modalities?.includes("video") && (
-                            <SparkVideouploadLine style={{ fontSize: 12 }} />
+                            <SparkVideouploadLine
+                              style={{ fontSize: 12 }}
+                            />
                           )}
                           {model.input_modalities?.includes("file") && (
                             <SparkFilePdfLine style={{ fontSize: 12 }} />
@@ -672,12 +792,12 @@ export function RemoteModelManageModal({
                               style={{ fontSize: 12, color: "purple" }}
                             />
                           )}
-                          {/* Price */}
                           {model.pricing?.prompt && (
                             <span style={{ color: "green", marginLeft: 4 }}>
                               $
                               {(
-                                parseFloat(model.pricing.prompt) * 1_000_000
+                                parseFloat(model.pricing.prompt) *
+                                1_000_000
                               ).toFixed(2)}
                               /1M in
                               {model.pricing?.completion && (

@@ -7,10 +7,19 @@ import logging
 from typing import List, Literal, Optional
 from copy import deepcopy
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    HTTPException,
+    Path,
+    Query,
+    Request,
+)
 from pydantic import BaseModel, Field
 
 from ..agent_context import get_agent_for_request
+from ..utils import schedule_agent_reload
 from ...config.config import load_agent_config, save_agent_config
 from ...providers.provider import ProviderInfo, ModelInfo
 from ...providers.provider_manager import ActiveModelsInfo, ProviderManager
@@ -27,6 +36,12 @@ ChatModelName = Literal[
     "AnthropicChatModel",
     "GeminiChatModel",
 ]
+
+# effective: agent-specific if set, otherwise global
+# global: the global model only, ignoring any agent-specific setting
+# agent: a specific agent's model only, error if not set
+ActiveModelReadScope = Literal["effective", "global", "agent"]
+ActiveModelWriteScope = Literal["global", "agent"]
 
 
 def get_provider_manager(request: Request) -> ProviderManager:
@@ -61,6 +76,14 @@ class ProviderConfigRequest(BaseModel):
 class ModelSlotRequest(BaseModel):
     provider_id: str = Field(..., description="Provider to use")
     model: str = Field(..., description="Model identifier")
+    scope: ActiveModelWriteScope = Field(
+        ...,
+        description="Whether to update the global model or a specific agent",
+    )
+    agent_id: Optional[str] = Field(
+        default=None,
+        description="Target agent ID when scope is 'agent'",
+    )
 
 
 class CreateCustomProviderRequest(BaseModel):
@@ -75,6 +98,35 @@ class CreateCustomProviderRequest(BaseModel):
 class AddModelRequest(BaseModel):
     id: str = Field(...)
     name: str = Field(...)
+
+
+def _validate_model_slot(
+    manager: ProviderManager,
+    provider_id: str,
+    model_id: str,
+) -> None:
+    """Validate that the provider and model exist without mutating state."""
+    provider = manager.get_provider(provider_id)
+    if provider is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Provider '{provider_id}' not found.",
+        )
+    if not provider.has_model(model_id):
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Model '{model_id}' not found in provider '{provider_id}'."),
+        )
+
+
+async def _load_agent_model(
+    request: Request,
+    agent_id: str,
+) -> ModelSlotConfig | None:
+    """Load the model configured for a specific agent."""
+    workspace = await get_agent_for_request(request, agent_id=agent_id)
+    agent_config = load_agent_config(workspace.agent_id)
+    return agent_config.active_model
 
 
 @router.get(
@@ -186,10 +238,6 @@ class DiscoverModelsRequest(BaseModel):
         default=None,
         description="Optional chat model class to use for discovery",
     )
-    include_extended: bool = Field(
-        default=False,
-        description="Include extended metadata for OpenRouter",
-    )
 
 
 class DiscoverModelsResponse(BaseModel):
@@ -232,9 +280,7 @@ async def test_provider(
         ok, msg = await tmp_provider.check_connection()
         return TestConnectionResponse(
             success=ok,
-            message="Connection successful"
-            if ok
-            else f"Connection failed: {msg}",
+            message="Connection successful" if ok else f"Connection failed: {msg}",
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -264,36 +310,10 @@ async def discover_models(
                 detail=f"Provider '{provider_id}' not found",
             )
         try:
-            # Check if we should fetch extended info (for OpenRouter)
-            include_extended = body.include_extended if body else False
-
-            # For OpenRouter, use fetch_extended_models if requested
-            if provider_id == "openrouter" and include_extended:
-                provider = manager.get_provider(provider_id)
-                if provider and isinstance(provider, OpenRouterProvider):
-                    result = await provider.fetch_extended_models()
-                    # Add models to provider
-                    for model in result:
-                        await provider.add_model(
-                            model,
-                            target="extra_models",
-                        )
-                    # pylint: disable=protected-access
-                    manager._save_provider(
-                        provider,
-                        is_builtin=True,
-                    )
-                    success = True
-                else:
-                    result = await manager.fetch_provider_models(
-                        provider_id,
-                    )
-                    success = True
-            else:
-                result = await manager.fetch_provider_models(
-                    provider_id,
-                )
-                success = True
+            result = await manager.fetch_provider_models(
+                provider_id,
+            )
+            success = True
         except Exception:
             result = []
             success = False
@@ -369,6 +389,46 @@ async def add_model_endpoint(
     return provider
 
 
+class ProbeMultimodalResponse(BaseModel):
+    supports_image: bool = Field(
+        default=False,
+        description="Whether the model supports image input",
+    )
+    supports_video: bool = Field(
+        default=False,
+        description="Whether the model supports video input",
+    )
+    supports_multimodal: bool = Field(
+        default=False,
+        description="Whether the model supports any multimodal input",
+    )
+    image_message: str = Field(
+        default="",
+        description="Probe result message for image support",
+    )
+    video_message: str = Field(
+        default="",
+        description="Probe result message for video support",
+    )
+
+
+@router.post(
+    "/{provider_id}/models/{model_id:path}/probe-multimodal",
+    response_model=ProbeMultimodalResponse,
+    summary="Probe model multimodal capability",
+)
+async def probe_model_multimodal(
+    manager: ProviderManager = Depends(get_provider_manager),
+    provider_id: str = Path(...),
+    model_id: str = Path(...),
+) -> ProbeMultimodalResponse:
+    """Probe image and video support by sending lightweight test requests."""
+    result = await manager.probe_model_multimodal(provider_id, model_id)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return ProbeMultimodalResponse(**result)
+
+
 @router.delete(
     "/{provider_id}/models/{model_id:path}",
     response_model=ProviderInfo,
@@ -392,39 +452,56 @@ async def remove_model_endpoint(
 @router.get(
     "/active",
     response_model=ActiveModelsInfo,
-    summary="Get active LLM",
+    summary="Get effective active LLM",
 )
 async def get_active_models(
     request: Request,
     manager: ProviderManager = Depends(get_provider_manager),
+    scope: ActiveModelReadScope = Query(default="effective"),
+    agent_id: Optional[str] = Query(default=None),
 ) -> ActiveModelsInfo:
-    """Get active model (agent-specific or global fallback)."""
-    # Try to get agent-specific active model
-    try:
-        workspace = await get_agent_for_request(request)
-        logger.debug(
-            f"get_active_models: got workspace.agent_id={workspace.agent_id}",
-        )
-        agent_config = load_agent_config(workspace.agent_id)
-        logger.debug(
-            f"get_active_models: agent_config.active_model="
-            f"{agent_config.active_model}",
-        )
-        if agent_config.active_model:
-            logger.info(
-                f"Returning agent-specific model for {workspace.agent_id}: "
-                f"{agent_config.active_model}",
+    """Get active model by scope.
+
+    - effective: agent-specific first, otherwise global fallback
+    - global: ProviderManager global model only
+    - agent: a specific agent's configured model only
+    """
+    if scope == "global":
+        return ActiveModelsInfo(active_llm=manager.get_active_model())
+
+    if scope == "agent":
+        if not agent_id:
+            raise HTTPException(
+                status_code=400,
+                detail="agent_id is required when scope is 'agent'",
             )
-            return ActiveModelsInfo(active_llm=agent_config.active_model)
-    except Exception as e:
+        return ActiveModelsInfo(
+            active_llm=await _load_agent_model(request, agent_id),
+        )
+
+    try:
+        target_agent_id = agent_id
+        if target_agent_id is None:
+            workspace = await get_agent_for_request(request)
+            target_agent_id = workspace.agent_id
+
+        agent_model = await _load_agent_model(request, target_agent_id)
+        if agent_model:
+            logger.info(
+                "Returning agent-specific model for %s: %s",
+                target_agent_id,
+                agent_model,
+            )
+            return ActiveModelsInfo(active_llm=agent_model)
+    except (HTTPException, OSError, ValueError, TypeError) as exc:
         logger.warning(
-            f"Failed to get agent-specific model: {e}",
+            "Failed to get agent-specific model: %s",
+            exc,
             exc_info=True,
         )
 
-    # Fallback to global active model
     global_model = manager.get_active_model()
-    logger.info(f"Returning global model: {global_model}")
+    logger.info("Returning global model: %s", global_model)
     return ActiveModelsInfo(active_llm=global_model)
 
 
@@ -438,33 +515,60 @@ async def set_active_model(
     manager: ProviderManager = Depends(get_provider_manager),
     body: ModelSlotRequest = Body(...),
 ) -> ActiveModelsInfo:
-    """Set active model for current agent."""
-    # Validate provider and model exist
-    try:
-        await manager.activate_model(body.provider_id, body.model)
-    except ValueError as exc:
-        message = str(exc)
-        lower_msg = message.lower()
-        if "provider" in lower_msg and "not found" in lower_msg:
-            raise HTTPException(status_code=404, detail=message) from exc
-        raise HTTPException(status_code=400, detail=message) from exc
+    """Set active model by scope."""
+    if body.scope == "global":
+        try:
+            await manager.activate_model(body.provider_id, body.model)
+        except ValueError as exc:
+            message = str(exc)
+            lower_msg = message.lower()
+            if "provider" in lower_msg and "not found" in lower_msg:
+                raise HTTPException(status_code=404, detail=message) from exc
+            raise HTTPException(status_code=400, detail=message) from exc
 
-    # Save to agent config
+        return ActiveModelsInfo(active_llm=manager.get_active_model())
+
+    if not body.agent_id:
+        raise HTTPException(
+            status_code=400,
+            detail="agent_id is required when scope is 'agent'",
+        )
+
+    _validate_model_slot(manager, body.provider_id, body.model)
+
     try:
-        workspace = await get_agent_for_request(request)
+        workspace = await get_agent_for_request(
+            request,
+            agent_id=body.agent_id,
+        )
         agent_config = load_agent_config(workspace.agent_id)
         agent_config.active_model = ModelSlotConfig(
             provider_id=body.provider_id,
             model=body.model,
         )
         save_agent_config(workspace.agent_id, agent_config)
-    except Exception as e:
-        # Log warning but don't fail the request
-        logger.warning(
-            f"Failed to save active model to agent config: {e}",
-        )
+        # Hot reload agent (async, non-blocking)
+        schedule_agent_reload(request, workspace.agent_id)
 
-    return ActiveModelsInfo(active_llm=manager.get_active_model())
+    except (HTTPException, OSError, ValueError, TypeError) as exc:
+        logger.warning(
+            "Failed to save active model to agent config: %s",
+            exc,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to save active model to agent config",
+        ) from exc
+
+    manager.maybe_probe_multimodal(body.provider_id, body.model)
+
+    return ActiveModelsInfo(
+        active_llm=ModelSlotConfig(
+            provider_id=body.provider_id,
+            model=body.model,
+        ),
+    )
 
 
 # =============================================================================
@@ -542,11 +646,7 @@ class FilterModelsResponse(BaseModel):
 async def get_openrouter_series(
     manager: ProviderManager = Depends(get_provider_manager),
 ) -> SeriesResponse:
-    """Get list of available provider/series from OpenRouter.
-
-    This endpoint fetches all available models from OpenRouter and returns
-    the unique provider/series names (e.g., 'openai', 'google', 'anthropic').
-    """
+    """Get list of available provider/series from OpenRouter."""
     provider = manager.get_provider("openrouter")
     if provider is None:
         raise HTTPException(
@@ -579,11 +679,7 @@ async def discover_openrouter_extended(
     manager: ProviderManager = Depends(get_provider_manager),
     body: Optional[DiscoverModelsRequest] = Body(default=None),
 ) -> DiscoverExtendedResponse:
-    """Discover available models from OpenRouter with full metadata.
-
-    This endpoint fetches all available models with extended information
-    including provider, modalities, and pricing.
-    """
+    """Discover available models from OpenRouter with full metadata."""
     provider = manager.get_provider("openrouter")
     if provider is None:
         raise HTTPException(
@@ -597,17 +693,13 @@ async def discover_openrouter_extended(
             detail="Provider is not an OpenRouter provider",
         )
 
-    # Update provider config if API key provided
     if body and body.api_key:
         manager.update_provider("openrouter", {"api_key": body.api_key})
 
     try:
         models = await provider.fetch_extended_models()
-
-        # Get available providers
         providers = await provider.get_available_providers()
 
-        # Convert to dict for JSON response
         models_dict = [
             {
                 "id": m.id,
@@ -644,14 +736,7 @@ async def filter_openrouter_models(
     manager: ProviderManager = Depends(get_provider_manager),
     body: FilterModelsRequest = Body(...),
 ) -> FilterModelsResponse:
-    """Filter OpenRouter models by provider, modalities, and price.
-
-    This endpoint fetches models and applies the specified filters:
-    - providers: Filter by provider/series (e.g., ['openai', 'google'])
-    - input_modalities: Required input types (e.g., ['image'])
-    - output_modalities: Required output types (e.g., ['text'])
-    - max_prompt_price: Maximum price per 1M input tokens
-    """
+    """Filter OpenRouter models by provider, modalities, and price."""
     provider = manager.get_provider("openrouter")
     if provider is None:
         raise HTTPException(
@@ -666,23 +751,18 @@ async def filter_openrouter_models(
         )
 
     try:
-        # Fetch all extended models
         models = await provider.fetch_extended_models()
 
-        # Apply filters
         filtered_models = provider.filter_models(
             models=models,
             providers=body.providers if body.providers else None,
-            input_modalities=(
-                body.input_modalities if body.input_modalities else None
-            ),
+            input_modalities=(body.input_modalities if body.input_modalities else None),
             output_modalities=(
                 body.output_modalities if body.output_modalities else None
             ),
             max_prompt_price=body.max_prompt_price,
         )
 
-        # Convert to dict for JSON response
         models_dict = [
             {
                 "id": m.id,

@@ -456,9 +456,7 @@ export function RemoteModelManageModal({
                               >
                                 {(m as any).input_modalities?.includes(
                                   "text",
-                                ) && (
-                                  <SparkTextLine style={{ fontSize: 12 }} />
-                                )}
+                                ) && <SparkTextLine style={{ fontSize: 12 }} />}
                                 {(m as any).input_modalities?.includes(
                                   "image",
                                 ) && (
@@ -483,9 +481,7 @@ export function RemoteModelManageModal({
                                 {(m as any).input_modalities?.includes(
                                   "file",
                                 ) && (
-                                  <SparkFilePdfLine
-                                    style={{ fontSize: 12 }}
-                                  />
+                                  <SparkFilePdfLine style={{ fontSize: 12 }} />
                                 )}
                                 {(m as any).output_modalities?.includes(
                                   "image",
@@ -500,9 +496,8 @@ export function RemoteModelManageModal({
                                   >
                                     $
                                     {(
-                                      parseFloat(
-                                        (m as any).pricing.prompt,
-                                      ) * 1_000_000
+                                      parseFloat((m as any).pricing.prompt) *
+                                      1_000_000
                                     ).toFixed(2)}
                                     /1M in
                                     {(m as any).pricing.completion && (
@@ -567,9 +562,7 @@ export function RemoteModelManageModal({
                                 size="small"
                                 danger
                                 icon={<DeleteOutlined />}
-                                onClick={() =>
-                                  handleRemoveModel(m.id, m.name)
-                                }
+                                onClick={() => handleRemoveModel(m.id, m.name)}
                               />
                             </>
                           ) : (
@@ -706,9 +699,7 @@ export function RemoteModelManageModal({
                       value: "text",
                     },
                   ]}
-                  value={
-                    selectedInputModality ? [selectedInputModality] : []
-                  }
+                  value={selectedInputModality ? [selectedInputModality] : []}
                   onChange={(vals) =>
                     setSelectedInputModality(
                       vals.length > 0 ? (vals[0] as string) : null,
@@ -770,19 +761,13 @@ export function RemoteModelManageModal({
                             <SparkTextLine style={{ fontSize: 12 }} />
                           )}
                           {model.input_modalities?.includes("image") && (
-                            <SparkImageuploadLine
-                              style={{ fontSize: 12 }}
-                            />
+                            <SparkImageuploadLine style={{ fontSize: 12 }} />
                           )}
                           {model.input_modalities?.includes("audio") && (
-                            <SparkAudiouploadLine
-                              style={{ fontSize: 12 }}
-                            />
+                            <SparkAudiouploadLine style={{ fontSize: 12 }} />
                           )}
                           {model.input_modalities?.includes("video") && (
-                            <SparkVideouploadLine
-                              style={{ fontSize: 12 }}
-                            />
+                            <SparkVideouploadLine style={{ fontSize: 12 }} />
                           )}
                           {model.input_modalities?.includes("file") && (
                             <SparkFilePdfLine style={{ fontSize: 12 }} />
@@ -796,8 +781,7 @@ export function RemoteModelManageModal({
                             <span style={{ color: "green", marginLeft: 4 }}>
                               $
                               {(
-                                parseFloat(model.pricing.prompt) *
-                                1_000_000
+                                parseFloat(model.pricing.prompt) * 1_000_000
                               ).toFixed(2)}
                               /1M in
                               {model.pricing?.completion && (

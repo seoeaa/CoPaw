@@ -26,7 +26,6 @@ from ...providers.provider_manager import ActiveModelsInfo, ProviderManager
 from ...providers.openrouter_provider import OpenRouterProvider
 from ...providers.models import ModelSlotConfig
 
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/models", tags=["models"])

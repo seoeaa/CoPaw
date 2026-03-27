@@ -10,6 +10,7 @@ import { SparkCopyLine, SparkAttachmentLine } from "@agentscope-ai/icons";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import sessionApi from "./sessionApi";
+import SenderInfoCard from "./components/SenderInfoCard";
 import defaultConfig, { getDefaultConfig } from "./OptionsPanel/defaultConfig";
 import { chatApi } from "../../api/modules/chat";
 import { getApiUrl } from "../../api/config";
@@ -610,6 +611,9 @@ export default function ChatPage() {
             signal: data.signal,
           });
         },
+      },
+      cards: {
+        CoPawSenderInfoCard: SenderInfoCard,
       },
       actions: {
         list: [

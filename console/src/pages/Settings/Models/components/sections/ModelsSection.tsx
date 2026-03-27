@@ -16,6 +16,7 @@ interface ModelsSectionProps {
     api_key?: string;
     is_custom: boolean;
     is_local?: boolean;
+    require_api_key?: boolean;
   }>;
   activeModels: {
     active_llm?: {
@@ -50,9 +51,10 @@ export function ModelsSection({
           (p.models?.length ?? 0) + (p.extra_models?.length ?? 0) > 0;
         if (!hasModels) return false;
         if (p.is_local) return true;
-        if (p.id === "ollama") return !!p.base_url;
+        if (p.require_api_key === false) return !!p.base_url;
         if (p.is_custom) return !!p.base_url;
-        return !!p.api_key;
+        if (p.require_api_key ?? true) return !!p.api_key;
+        return true;
       }),
     [providers],
   );
@@ -89,6 +91,7 @@ export function ModelsSection({
     const body: ModelSlotRequest = {
       provider_id: selectedProviderId,
       model: selectedModel,
+      scope: "global",
     };
 
     setSaving(true);
@@ -114,18 +117,6 @@ export function ModelsSection({
 
   return (
     <div className={styles.slotSection}>
-      <div className={styles.slotHeader}>
-        <h3 className={styles.slotTitle}>{t("models.llmConfiguration")}</h3>
-        {currentSlot?.provider_id && currentSlot?.model && (
-          <span className={styles.slotCurrent}>
-            {t("models.active", {
-              provider: currentSlot.provider_id,
-              model: currentSlot.model,
-            })}
-          </span>
-        )}
-      </div>
-
       <div className={styles.slotForm}>
         <div className={styles.slotField}>
           <label className={styles.slotLabel}>{t("models.provider")}</label>

@@ -117,14 +117,14 @@ export const createColumns = (
           case "weekly": {
             const dayNames = (cronParts.daysOfWeek || [])
               .map((d) => {
-                const dayMap: Record<number, string> = {
-                  0: handlers.t("cronJobs.cronDaySun"),
-                  1: handlers.t("cronJobs.cronDayMon"),
-                  2: handlers.t("cronJobs.cronDayTue"),
-                  3: handlers.t("cronJobs.cronDayWed"),
-                  4: handlers.t("cronJobs.cronDayThu"),
-                  5: handlers.t("cronJobs.cronDayFri"),
-                  6: handlers.t("cronJobs.cronDaySat"),
+                const dayMap: Record<string, string> = {
+                  mon: handlers.t("cronJobs.cronDayMon"),
+                  tue: handlers.t("cronJobs.cronDayTue"),
+                  wed: handlers.t("cronJobs.cronDayWed"),
+                  thu: handlers.t("cronJobs.cronDayThu"),
+                  fri: handlers.t("cronJobs.cronDayFri"),
+                  sat: handlers.t("cronJobs.cronDaySat"),
+                  sun: handlers.t("cronJobs.cronDaySun"),
                 };
                 return dayMap[d] || d;
               })
@@ -170,7 +170,7 @@ export const createColumns = (
       width: 140,
     },
     {
-      title: handlers.t("cronJobs.taskText"),
+      title: handlers.t("cronJobs.text"),
       dataIndex: "text",
       key: "text",
       width: 200,
@@ -187,7 +187,7 @@ export const createColumns = (
       },
     },
     {
-      title: "RequestInput",
+      title: handlers.t("cronJobs.requestInput"),
       dataIndex: ["request", "input"],
       key: "request_input",
       width: 350,

@@ -7,20 +7,23 @@ from __future__ import annotations
 
 import logging
 from typing import AsyncIterator
+from typing import TYPE_CHECKING
 
 from agentscope.message import Msg, TextBlock
-from reme.memory.file_based.reme_in_memory_memory import ReMeInMemoryMemory
 
+from . import control_commands
 from .daemon_commands import (
     DaemonContext,
     DaemonCommandHandlerMixin,
     parse_daemon_query,
 )
 from ...agents.command_handler import CommandHandler
-from ...agents.utils.token_counting import _get_token_counter
-from ...config import load_config
+from ...config.config import load_agent_config
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from .runner import AgentRunner
 
 
 def _get_last_user_text(msgs) -> str | None:
@@ -49,33 +52,29 @@ def _is_conversation_command(query: str | None) -> bool:
     return cmd in CommandHandler.SYSTEM_COMMANDS
 
 
+def _is_control_command(query: str | None) -> bool:
+    """True if query is a control command (/stop, etc.)."""
+    return control_commands.is_control_command(query)
+
+
 def _is_command(query: str | None) -> bool:
-    """True if query is any known command (daemon or conversation)."""
+    """True if query is any known command.
+
+    Priority order: daemon > control > conversation
+    """
     if not query or not query.startswith("/"):
         return False
     if parse_daemon_query(query) is not None:
         return True
+    if _is_control_command(query):
+        return True
     return _is_conversation_command(query)
 
 
-class _LightweightSessionAgent:
-    """Minimal agent-like object for session load/save (memory only)."""
-
-    def __init__(self, memory: ReMeInMemoryMemory) -> None:
-        self.memory = memory
-
-    def state_dict(self) -> dict:
-        return {"memory": self.memory.state_dict()}
-
-    def load_state_dict(self, state_dict: dict, strict: bool = True) -> None:
-        mem = state_dict.get("memory", state_dict)
-        self.memory.load_state_dict(mem, strict=strict)
-
-
-async def run_command_path(
+async def run_command_path(  # pylint: disable=too-many-statements
     request,
     msgs,
-    runner,
+    runner: AgentRunner,
 ) -> AsyncIterator[tuple]:
     """Run command path and yield (msg, last) for each response.
 
@@ -98,11 +97,11 @@ async def run_command_path(
     parsed = parse_daemon_query(query)
     if parsed is not None:
         handler = DaemonCommandHandlerMixin()
-        restart_cb = getattr(runner, "_restart_callback", None)
+        manager = getattr(runner, "_manager", None)
         if parsed[0] == "restart":
             logger.info(
-                "run_command_path: daemon restart, callback=%s",
-                "set" if restart_cb is not None else "None",
+                "run_command_path: daemon restart, manager=%s",
+                "set" if manager is not None else "None",
             )
             # Yield hint first so user sees it before restart runs.
             hint = Msg(
@@ -113,39 +112,132 @@ async def run_command_path(
                         type="text",
                         text=(
                             "**Restart in progress**\n\n"
-                            "- The service may be unresponsive for a while. "
+                            "- Reloading agent with zero-downtime. "
                             "Please wait."
                         ),
                     ),
                 ],
             )
             yield hint, True
-        context = DaemonContext(
-            load_config_fn=load_config,
+
+        agent_id = runner.agent_id
+        daemon_ctx = DaemonContext(
+            load_config_fn=lambda: load_agent_config(agent_id),
             memory_manager=runner.memory_manager,
-            restart_callback=restart_cb,
+            manager=manager,
+            agent_id=agent_id,
+            session_id=session_id,
         )
-        msg = await handler.handle_daemon_command(query, context)
+        msg = await handler.handle_daemon_command(query, daemon_ctx)
         yield msg, True
         logger.info("handle_daemon_command %s completed", query)
         return
 
-    # Conversation path: lightweight memory + CommandHandler
-    memory = ReMeInMemoryMemory(token_counter=_get_token_counter())
-    light = _LightweightSessionAgent(memory=memory)
-    if session_id and user_id:
-        try:
-            await runner.session.load_session_state(
-                session_id=session_id,
-                user_id=user_id,
-                agent=light,
+    # Control command path (e.g. /stop)
+    if _is_control_command(query):
+        workspace = runner._workspace  # pylint: disable=protected-access
+        if workspace is None:
+            logger.error(
+                "run_command_path: control command but workspace not set",
             )
-        except ValueError:
-            pass  # No session file yet
+            error_msg = Msg(
+                name="Friday",
+                role="assistant",
+                content=[
+                    TextBlock(
+                        type="text",
+                        text=(
+                            "**Error**\n\n"
+                            "Control command unavailable "
+                            "(workspace not initialized)"
+                        ),
+                    ),
+                ],
+            )
+            yield error_msg, True
+            return
+
+        # Get channel instance from request
+        channel_id = getattr(request, "channel", "")
+        channel = None
+
+        # Get channel_manager from workspace
+        channel_manager = workspace.channel_manager
+        if channel_manager is not None:
+            channel = await channel_manager.get_channel(channel_id)
+
+        if channel is None:
+            logger.error(
+                f"run_command_path: channel not found: {channel_id}",
+            )
+            error_msg = Msg(
+                name="Friday",
+                role="assistant",
+                content=[
+                    TextBlock(
+                        type="text",
+                        text=f"**Error**\n\nChannel not found: {channel_id}",
+                    ),
+                ],
+            )
+            yield error_msg, True
+            return
+
+        # Extract user_id from request
+        user_id = getattr(request, "user_id", "")
+
+        # Build control context
+        control_ctx = control_commands.ControlContext(
+            workspace=workspace,
+            payload=request,
+            channel=channel,
+            session_id=session_id,
+            user_id=user_id,
+            args={},
+        )
+
+        # Handle control command
+        try:
+            response_text = await control_commands.handle_control_command(
+                query,
+                control_ctx,
+            )
+            response_msg = Msg(
+                name="Friday",
+                role="assistant",
+                content=[TextBlock(type="text", text=response_text)],
+            )
+            yield response_msg, True
+            logger.info("handle_control_command %s completed", query)
+        except Exception as e:
+            logger.exception(
+                f"Control command failed: {query}",
+            )
+            error_msg = Msg(
+                name="Friday",
+                role="assistant",
+                content=[
+                    TextBlock(
+                        type="text",
+                        text=f"**Command Failed**\n\n{str(e)}",
+                    ),
+                ],
+            )
+            yield error_msg, True
+        return
+
+    # Conversation path: lightweight memory + CommandHandler
+    memory = runner.memory_manager.get_in_memory_memory()
+    session_state = await runner.session.get_session_state_dict(
+        session_id=session_id,
+        user_id=user_id,
+    )
+    memory_state = session_state.get("agent", {}).get("memory", {})
+    memory.load_state_dict(memory_state, strict=False)
 
     conv_handler = CommandHandler(
         agent_name="Friday",
-        memory=light.memory,
+        memory=memory,
         memory_manager=runner.memory_manager,
         enable_memory_manager=runner.memory_manager is not None,
     )
@@ -159,9 +251,20 @@ async def run_command_path(
         )
     yield response_msg, True
 
+    # Update memory key with session_id & user_id to session,
+    # but only if identifiers are present
     if session_id and user_id:
-        await runner.session.save_session_state(
+        await runner.session.update_session_state(
             session_id=session_id,
+            key="agent.memory",
+            value=memory.state_dict(),
             user_id=user_id,
-            agent=light,
+        )
+    else:
+        logger.warning(
+            "Skipping session_state update for conversation"
+            " memory due to missing session_id or user_id (session_id=%r, "
+            "user_id=%r)",
+            session_id,
+            user_id,
         )

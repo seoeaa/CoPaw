@@ -1,150 +1,99 @@
-import { useState, useEffect } from "react";
-import {
-  Form,
-  InputNumber,
-  Button,
-  Card,
-  message,
-} from "@agentscope-ai/design";
+import { Button, Form } from "@agentscope-ai/design";
 import { useTranslation } from "react-i18next";
-import api from "../../../api";
+import { useAgentConfig } from "./useAgentConfig.tsx";
+import {
+  PageHeader,
+  ReactAgentCard,
+  LlmRetryCard,
+  LlmRateLimiterCard,
+  ContextCompactCard,
+  ToolResultCompactCard,
+  MemorySummaryCard,
+  EmbeddingConfigCard,
+} from "./components";
 import styles from "./index.module.less";
-import type { AgentsRunningConfig } from "../../../api/types";
 
 function AgentConfigPage() {
   const { t } = useTranslation();
-  const [form] = Form.useForm();
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    form,
+    loading,
+    saving,
+    error,
+    language,
+    savingLang,
+    timezone,
+    savingTimezone,
+    fetchConfig,
+    handleSave,
+    handleLanguageChange,
+    handleTimezoneChange,
+  } = useAgentConfig();
 
-  useEffect(() => {
-    fetchConfig();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const llmRetryEnabled = Form.useWatch("llm_retry_enabled", form) ?? true;
+  const maxInputLength = Form.useWatch("max_input_length", form) ?? 0;
 
-  const fetchConfig = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const config = await api.getAgentRunningConfig();
-      form.setFieldsValue(config);
-    } catch (err) {
-      const errMsg =
-        err instanceof Error ? err.message : t("agentConfig.loadFailed");
-      setError(errMsg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSave = async () => {
-    try {
-      const values = await form.validateFields();
-      setSaving(true);
-      await api.updateAgentRunningConfig(values as AgentsRunningConfig);
-      message.success(t("agentConfig.saveSuccess"));
-    } catch (err) {
-      if (err instanceof Error && "errorFields" in err) {
-        return;
-      }
-      const errMsg =
-        err instanceof Error ? err.message : t("agentConfig.saveFailed");
-      message.error(errMsg);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleReset = () => {
-    fetchConfig();
-  };
-
-  return (
-    <div className={styles.page}>
-      {loading && (
+  if (loading) {
+    return (
+      <div className={styles.configPage}>
         <div className={styles.centerState}>
           <span className={styles.stateText}>{t("common.loading")}</span>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {error && !loading && (
+  if (error) {
+    return (
+      <div className={styles.configPage}>
         <div className={styles.centerState}>
           <span className={styles.stateTextError}>{error}</span>
           <Button size="small" onClick={fetchConfig} style={{ marginTop: 12 }}>
             {t("environments.retry")}
           </Button>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      <div style={{ display: loading || error ? "none" : "block" }}>
-        <div className={styles.header}>
-          <div>
-            <h1 className={styles.title}>{t("agentConfig.title")}</h1>
-            <p className={styles.description}>{t("agentConfig.description")}</p>
-          </div>
-        </div>
+  return (
+    <div className={styles.configPage}>
+      <PageHeader />
 
-        <Card className={styles.formCard}>
-          <Form form={form} layout="vertical" className={styles.form}>
-            <Form.Item
-              label={t("agentConfig.maxIters")}
-              name="max_iters"
-              rules={[
-                { required: true, message: t("agentConfig.maxItersRequired") },
-                {
-                  type: "number",
-                  min: 1,
-                  message: t("agentConfig.maxItersMin"),
-                },
-              ]}
-              tooltip={t("agentConfig.maxItersTooltip")}
-            >
-              <InputNumber
-                style={{ width: "100%" }}
-                min={1}
-                placeholder={t("agentConfig.maxItersPlaceholder")}
-              />
-            </Form.Item>
+      <Form form={form} layout="vertical" className={styles.form}>
+        <ReactAgentCard
+          language={language}
+          savingLang={savingLang}
+          onLanguageChange={handleLanguageChange}
+          timezone={timezone}
+          savingTimezone={savingTimezone}
+          onTimezoneChange={handleTimezoneChange}
+        />
 
-            <Form.Item
-              label={t("agentConfig.maxInputLength")}
-              name="max_input_length"
-              rules={[
-                {
-                  required: true,
-                  message: t("agentConfig.maxInputLengthRequired"),
-                },
-                {
-                  type: "number",
-                  min: 1000,
-                  message: t("agentConfig.maxInputLengthMin"),
-                },
-              ]}
-              tooltip={t("agentConfig.maxInputLengthTooltip")}
-            >
-              <InputNumber
-                style={{ width: "100%" }}
-                min={1000}
-                step={1024}
-                placeholder={t("agentConfig.maxInputLengthPlaceholder")}
-              />
-            </Form.Item>
+        <LlmRetryCard llmRetryEnabled={llmRetryEnabled} />
 
-            <Form.Item className={styles.buttonGroup}>
-              <Button
-                onClick={handleReset}
-                disabled={saving}
-                style={{ marginRight: 8 }}
-              >
-                {t("common.reset")}
-              </Button>
-              <Button type="primary" onClick={handleSave} loading={saving}>
-                {t("common.save")}
-              </Button>
-            </Form.Item>
-          </Form>
-        </Card>
+        <LlmRateLimiterCard />
+
+        <ContextCompactCard maxInputLength={maxInputLength} />
+
+        <ToolResultCompactCard />
+
+        <MemorySummaryCard />
+
+        <EmbeddingConfigCard />
+      </Form>
+
+      <div className={styles.footerActions}>
+        <Button
+          onClick={fetchConfig}
+          disabled={saving}
+          style={{ marginRight: 8 }}
+        >
+          {t("common.reset")}
+        </Button>
+        <Button type="primary" onClick={handleSave} loading={saving}>
+          {t("common.save")}
+        </Button>
       </div>
     </div>
   );

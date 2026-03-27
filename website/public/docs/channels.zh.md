@@ -13,6 +13,11 @@
 - **bot_prefix** — 机器人回复前缀（如 `[BOT]`），方便区分
 - **filter_tool_messages** — （可选，默认 `false`）过滤工具调用和输出消息，不发送给用户。设为 `true` 可隐藏工具执行详情。
 - **filter_thinking** — （可选，默认 `false`）过滤模型的思考/推理内容，不发送给用户。设为 `true` 可隐藏 thinking 内容。
+- **dm_policy** — （可选，默认 `"open"`）私聊访问策略。`"open"` 允许所有用户；`"allowlist"` 仅允许 `allow_from` 中的用户。
+- **group_policy** — （可选，默认 `"open"`）群聊访问策略。`"open"` 允许所有用户；`"allowlist"` 仅允许 `allow_from` 中的用户。
+- **allow_from** — （可选，默认 `[]`）允许与机器人交互的用户 ID 列表。仅当 `dm_policy` 或 `group_policy` 设为 `"allowlist"` 时生效。
+- **deny_message** — （可选，默认 `""`）被白名单拒绝的用户收到的自动回复消息。留空则不回复。
+- **require_mention** — （可选，默认 `false`）设为 `true` 时，机器人在群聊中仅响应被 @提及 的消息。白名单检查（`allow_from`）优先执行，通过后再检查是否被提及。
 
 下面按频道说明如何获取凭证并填写配置。
 
@@ -78,12 +83,18 @@
   "enabled": true,
   "bot_prefix": "[BOT]",
   "client_id": "你的 Client ID",
-  "client_secret": "你的 Client Secret"
+  "client_secret": "你的 Client Secret",
+  "message_type": "markdown",
+  "card_template_id": "",
+  "card_template_key": "content",
+  "robot_code": "",
   "filter_tool_messages": false
 }
 ```
 
 - 若希望隐藏工具执行详情，可设置 `filter_tool_messages: true`。
+- AI Card 模式：将 `message_type` 设为 `card`，并填写 `card_template_id`；`card_template_key` 必须与钉钉模板变量名完全一致（默认 `content`）。
+- 群聊场景建议显式配置 `robot_code`；留空时 CoPaw 会回退使用 `client_id`。
 
 保存后若服务已运行会自动重载；未运行则执行 `copaw app` 启动。
 
@@ -169,7 +180,7 @@
 
 7. 在「事件与回调」中，点击「事件配置」，选择订阅方式为**长连接（WebSocket）** 模式（无需公网 IP）
 
-> 注：**操作顺序**为先配置 App ID/Secret → 启动 `copaw app` → 再在开放平台配置长连接，如果此处仍显示错误，尝试先暂停copaw服务并重新启动 `copaw app`。
+> 注：**操作顺序**为先配置 App ID/Secret → 启动 `copaw app` → 再在开放平台配置长连接，如果此处仍显示错误，尝试先暂停 CoPaw 服务并重新启动 `copaw app`。
 
 ![websocket](https://img.alicdn.com/imgextra/i2/O1CN01LQwKON1x7QMNP41kC_!!6000000006396-2-tps-4082-2126.png)
 
@@ -204,7 +215,7 @@
 
 其他字段（encrypt_key、verification_token、media_dir）可选，WebSocket 模式可不填，有默认值。依赖：`pip install lark-oapi`，然后 `copaw app`。如果你使用 SOCKS 代理联网，还需安装 `python-socks`（例如 `pip install python-socks`），否则可能报错：`python-socks is required to use a SOCKS proxy`。
 
-> 注: **App ID** 和 **App Secret** 信息也可以在Console前端填写，但需重启copaw服务，才能继续配置长链接的操作。
+> 注: **App ID** 和 **App Secret** 信息也可以在Console前端填写，但需重启 CoPaw 服务，才能继续配置长链接的操作。
 > ![console](https://img.alicdn.com/imgextra/i2/O1CN01k7UVrP1E2hZBAn0oF_!!6000000000294-2-tps-4082-2126.png)
 
 ### 机器人权限建议
@@ -427,6 +438,125 @@
 
 ---
 
+## 企业微信
+
+### 创建新企业
+
+个人使用者可以访问[企业微信官网](https://work.weixin.qq.com)注册账号，创建新企业，成为企业管理员。
+
+![创建企业](https://img.alicdn.com/imgextra/i2/O1CN01Xg8B3i1EQWAKt5xj0_!!6000000000346-2-tps-2938-1588.png)
+
+填写企业信息与管理员信息，并绑定微信账号
+
+![新建账号](https://img.alicdn.com/imgextra/i4/O1CN01uRF1Mv1TX87bOQ045_!!6000000002391-2-tps-1538-905.png)
+
+注册成功之后即可登陆企业微信开始使用。
+
+若已经有企业微信账号或是企业普通员工，可以直接在当前企业创建API模式机器人。
+
+### 创建机器人
+
+可在工作台点击智能机器人-创建机器人，选择API模式创建-通过长链接配置
+
+![创建机器人1](https://img.alicdn.com/imgextra/i3/O1CN01lcA2rX1fm2P19SLcB_!!6000000004048-2-tps-1440-814.png)
+
+![新建机器人2](https://img.alicdn.com/imgextra/i1/O1CN014R3a0f1mnb3qbycMV_!!6000000004999-2-tps-1440-814.png)
+
+![新建机器人3](https://img.alicdn.com/imgextra/i4/O1CN01kZDNVk1ugHf73ybs2_!!6000000006066-2-tps-2938-1594.png)
+
+获取`Bot ID`和`Secret`
+
+![新建机器人4](https://img.alicdn.com/imgextra/i1/O1CN01Znm7aQ1Tfpe5Ha9WL_!!6000000002410-2-tps-1482-992.png)
+
+### 绑定bot
+
+可以在Console或是`config.json`填写Bot ID和Secret绑定bot
+
+**方法一**在console填写
+
+![绑定机器人](https://img.alicdn.com/imgextra/i2/O1CN01X8NcEj1NrqL0e3AMS_!!6000000001624-2-tps-2732-1390.png)
+
+**方法二**在`config.json`填写(默认文件路径为`~/.copaw/config.json`)
+找到`wecom`，填写对应信息，例如：
+
+```json
+"wecom": {
+      "enabled": true,
+      "dm_policy": "open",
+      "group_policy": "open",
+      "bot_id": "your bot_id",
+      "secret": "your secret",
+      "media_dir": "~/.copaw/media",
+      "max_reconnect_attempts": -1
+    }
+```
+
+### 在企业微信开始与机器人聊天
+
+![开始使用](https://img.alicdn.com/imgextra/i3/O1CN01ZsmpYr1tq4ViIbO80_!!6000000005952-2-tps-1308-1130.png)
+
+---
+
+## 微信个人（iLink）
+
+微信 iLink Bot 频道允许通过**个人微信账号**运行 AI 机器人，无需企业资质，使用官方 [iLink Bot HTTP API](https://weixin.qq.com/cgi-bin/readtemplate?t=ilink/chatbot) 协议。
+
+> **注意**：微信个人 Bot（iLink 协议）目前仍处于内测阶段，需申请接入资格后方可使用。
+
+### 工作原理
+
+- **登录方式**：首次使用时扫描二维码授权，Token 自动持久化到本地文件（默认 `~/.copaw/weixin_bot_token`），后续启动无需重复扫码。
+- **消息接收**：通过 HTTP 长轮询（`getupdates`）持续拉取新消息，支持文本、图片、语音（ASR 转录）和文件。
+- **消息发送**：通过 `sendmessage` 接口回复用户，当前仅支持文本（iLink API 限制）。
+
+### 扫码登录（推荐通过 Console）
+
+1. 在 CoPaw Web Console 中进入 **设置 → 通道 → 微信个人（iLink）**。
+2. 点击 **获取登录二维码**，等待二维码显示。
+3. 用手机微信扫描二维码并确认授权。
+4. 扫码成功后，Bot Token 会自动填入表单，点击 **保存** 即可。
+
+### 在配置文件中填写
+
+也可直接在 `config.json`（默认路径 `~/.copaw/config.json`）中配置：
+
+```json
+"weixin": {
+  "enabled": true,
+  "bot_token": "your_bot_token",
+  "bot_token_file": "~/.copaw/weixin_bot_token",
+  "base_url": "",
+  "media_dir": "~/.copaw/media",
+  "dm_policy": "open",
+  "group_policy": "open"
+}
+```
+
+| 字段             | 说明                                                     | 默认值                      |
+| ---------------- | -------------------------------------------------------- | --------------------------- |
+| `bot_token`      | 扫码登录后获取的 Bearer Token；留空则启动时引导扫码      | `""`                        |
+| `bot_token_file` | Token 持久化路径，下次启动自动读取                       | `~/.copaw/weixin_bot_token` |
+| `base_url`       | iLink API 地址，一般留空使用默认值                       | 官方默认地址                |
+| `media_dir`      | 接收到的图片、文件保存目录                               | `~/.copaw/media`            |
+| `dm_policy`      | 私聊策略：`open`（所有人）/ `close`（禁用）/ `allowlist` | `open`                      |
+| `group_policy`   | 群聊策略：同上                                           | `open`                      |
+| `allow_from`     | 允许的用户 ID 列表（`allowlist` 模式下有效）             | `[]`                        |
+
+### 环境变量方式
+
+也可通过环境变量配置：
+
+```bash
+WEIXIN_CHANNEL_ENABLED=1
+WEIXIN_BOT_TOKEN=your_bot_token
+WEIXIN_BOT_TOKEN_FILE=~/.copaw/weixin_bot_token
+WEIXIN_MEDIA_DIR=~/.copaw/media
+WEIXIN_DM_POLICY=open
+WEIXIN_GROUP_POLICY=open
+```
+
+---
+
 ## Telegram
 
 ### 获取 Telegram 机器人凭证
@@ -471,7 +601,7 @@
 
 ### 备注
 
-目前telegram白名单机制仍在施工中，推荐个人场景部署，不暴露username到公共环境中。
+可使用本页顶部介绍的通用访问控制字段（`dm_policy`、`group_policy`、`allow_from`、`deny_message`、`require_mention`）控制谁可以与机器人交互。仍建议不要将 bot username 暴露到公共环境中。
 
 建议在 `@BotFather` 设置：
 
@@ -479,6 +609,33 @@
 /setprivacy -> ENABLED # 设置bot回复权限
 /setjoingroups -> DISABLED # 拦截Group邀请
 ```
+
+---
+
+## Mattermost
+
+Mattermost 频道通过 WebSocket 实时监听事件，并使用 REST API 发送回复。支持私聊和群聊场景，在群聊中基于 **Thread（盖楼）** 划分会话上下文。
+
+### 获取凭证
+
+1. 在 Mattermost 中创建 **Bot 账号** (System Console → Integrations → Bot Accounts)。
+2. 给予机器人必要的权限（如 `Post all`），并获取 **Access Token**。
+3. 在控制台或 `config.json` 中配置 **URL** 和 **Token**。
+
+### 核心配置
+
+| 字段                              | 说明                                                      | 默认值   |
+| --------------------------------- | --------------------------------------------------------- | -------- |
+| **url**                           | Mattermost 实例的完整地址                                 | -        |
+| **bot_token**                     | 机器人的 Access Token                                     | -        |
+| **show_typing**                   | 是否开启「正在输入...」状态指示                           | `true`   |
+| **thread_follow_without_mention** | 在群聊已参与的 Thread 中，是否在后续无 @ 消息时也触发回复 | `false`  |
+| **dm_policy**                     | 私聊策略：`open` (全部允许) 或 `allowlist` (仅白名单)     | `"open"` |
+| **group_policy**                  | 群聊策略：`open` (全部允许) 或 `allowlist` (仅白名单)     | `"open"` |
+| **allow_from**                    | 允许的用户 ID 列表 (仅在策略为 `allowlist` 时生效)        | `[]`     |
+| **deny_message**                  | 被拒绝访问时的自动回复消息                                | `""`     |
+
+> **提示**：Mattermost 的 `session_id` 在私聊中固定为 `mattermost_dm:{mm_channel_id}`，在群聊中按 Thread ID 隔离回话。仅在 Session 首次触发时会自动拉取最近的历史记录作为上下文补全。
 
 ---
 
@@ -546,18 +703,117 @@ JSON消息格式
 
 ---
 
+## Matrix
+
+Matrix 频道通过 [matrix-nio](https://github.com/poljar/matrix-nio) 库将 CoPaw 接入任意 Matrix 服务器，支持私聊和群聊房间中的文本消息收发。
+
+### 创建机器人账号并获取 Access Token
+
+1. 在任意 Matrix 服务器上注册机器人账号（例如 [matrix.org](https://matrix.org)，可在 [app.element.io](https://app.element.io/#/register) 注册）。
+
+2. 获取机器人的 **Access Token**，最简便的方式是通过 Element：
+
+   - 以机器人账号登录 [app.element.io](https://app.element.io)
+   - 前往 **设置 → 帮助与关于 → 高级 → Access Token**
+   - 复制 Token（以 `syt_...` 开头）
+
+   也可以直接调用 Matrix Client-Server API：
+
+   ```bash
+   curl -X POST "https://matrix.org/_matrix/client/v3/login" \
+     -H "Content-Type: application/json" \
+     -d '{"type":"m.login.password","user":"@yourbot:matrix.org","password":"yourpassword"}'
+   ```
+
+   响应中的 `access_token` 即为所需 Token。
+
+3. 记录机器人的 **User ID**（格式：`@用户名:服务器`，例如 `@mybot:matrix.org`）和 **Homeserver URL**（例如 `https://matrix.org`）。
+
+### 配置频道
+
+**方式一：** 在 Console 中配置
+
+前往 **控制 → 频道**，点击 **Matrix**，启用后填写：
+
+- **Homeserver URL** — 例如 `https://matrix.org`
+- **User ID** — 例如 `@mybot:matrix.org`
+- **Access Token** — 上面复制的 Token（以密码框形式显示）
+
+**方式二：** 编辑 `~/.copaw/config.json`
+
+在 `config.json` 中找到 `channels.matrix`：
+
+```json
+"matrix": {
+  "enabled": true,
+  "bot_prefix": "[BOT]",
+  "homeserver": "https://matrix.org",
+  "user_id": "@mybot:matrix.org",
+  "access_token": "syt_..."
+}
+```
+
+保存后，若 CoPaw 已在运行，频道会自动重载。
+
+### 开始聊天
+
+从任意 Matrix 客户端（如 Element）邀请机器人进入房间或发起私聊。机器人会监听其已加入的所有房间中的消息。
+
+### 注意事项
+
+- Matrix 频道当前**仅支持文本消息**（不支持图片/文件附件）。
+- 机器人只能接收已加入房间的消息，发消息前请先邀请机器人进入对应房间。
+- 如使用自建服务器，将 `homeserver` 设置为你的服务器地址（例如 `https://matrix.example.com`）。
+
+---
+
+## 小艺（XiaoYi）
+
+小艺通道通过 **A2A (Agent-to-Agent) 协议** 基于 WebSocket 连接华为小艺平台。
+
+### 获取凭证
+
+1. 在小艺开放平台创建Agent。
+2. 获取 **AK** (Access Key)、**SK** (Secret Key) 和 **Agent ID**。
+
+### 核心配置
+
+| 字段         | 说明           | 默认值                                           |
+| ------------ | -------------- | ------------------------------------------------ |
+| **ak**       | 访问密钥       | -                                                |
+| **sk**       | 密钥           | -                                                |
+| **agent_id** | 代理唯一标识   | -                                                |
+| **ws_url**   | WebSocket 地址 | `wss://hag.cloud.huawei.com/openclaw/v1/ws/link` |
+
+### 支持的文件类型
+
+**图片**：JPEG, JPG, PNG, BMP, WEBP
+
+**文件**：PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, TXT
+
+> 注：小艺平台限制，不支持视频和音频文件。
+
+---
+
 ## 附录
 
 ### 配置总览
 
-| 频道     | 配置键   | 必填/主要字段                                                       |
-| -------- | -------- | ------------------------------------------------------------------- |
-| 钉钉     | dingtalk | client_id, client_secret                                            |
-| 飞书     | feishu   | app_id, app_secret；可选 encrypt_key, verification_token, media_dir |
-| iMessage | imessage | db_path, poll_sec（仅 macOS）                                       |
-| Discord  | discord  | bot_token；可选 http_proxy, http_proxy_auth                         |
-| QQ       | qq       | app_id, client_secret                                               |
-| Telegram | telegram | bot_token；可选 http_proxy, http_proxy_auth                         |
+| 频道       | 配置键     | 必填/主要字段                                                                           |
+| ---------- | ---------- | --------------------------------------------------------------------------------------- |
+| 钉钉       | dingtalk   | client_id, client_secret, message_type, card_template_id, card_template_key, robot_code |
+| 飞书       | feishu     | app_id, app_secret；可选 encrypt_key, verification_token, media_dir                     |
+| iMessage   | imessage   | db_path, poll_sec（仅 macOS）                                                           |
+| Discord    | discord    | bot_token；可选 http_proxy, http_proxy_auth                                             |
+| QQ         | qq         | app_id, client_secret                                                                   |
+| Telegram   | telegram   | bot_token；可选 http_proxy, http_proxy_auth                                             |
+| Mattermost | mattermost | url, bot_token; 可选 show_typing, dm_policy, allow_from                                 |
+| Matrix     | matrix     | homeserver, user_id, access_token                                                       |
+| 企业微信   | wecom      | bot_id, secret；可选 media_dir                                                          |
+| 微信个人   | weixin     | bot_token（或扫码登录）；可选 bot_token_file, base_url, media_dir                       |
+| 小艺       | xiaoyi     | ak, sk, agent_id；可选 ws_url                                                           |
+
+所有频道均支持本页顶部「通用字段」中介绍的访问控制字段（`dm_policy`、`group_policy`、`allow_from`、`deny_message`、`require_mention`）。
 
 各频道字段与完整结构见上文表格及 [配置与工作目录](./config)。
 
@@ -566,14 +822,19 @@ JSON消息格式
 不同频道对「文本 / 图片 / 视频 / 音频 / 文件」的**接收**（用户发给机器人）与**发送**（机器人回复用户）支持程度如下。
 「✓」= 已支持；「🚧」= 施工中（可实现但尚未实现）；「✗」= 不支持（该频道本身无法支持）。
 
-| 频道     | 接收文本 | 接收图片 | 接收视频 | 接收音频 | 接收文件 | 发送文本 | 发送图片 | 发送视频 | 发送音频 | 发送文件 |
-| -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- |
-| 钉钉     | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        |
-| 飞书     | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        |
-| Discord  | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | 🚧       | 🚧       | 🚧       | 🚧       |
-| iMessage | ✓        | ✗        | ✗        | ✗        | ✗        | ✓        | ✗        | ✗        | ✗        | ✗        |
-| QQ       | ✓        | 🚧       | 🚧       | 🚧       | 🚧       | ✓        | 🚧       | 🚧       | 🚧       | 🚧       |
-| Telegram | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        |
+| 频道       | 接收文本 | 接收图片 | 接收视频 | 接收音频 | 接收文件 | 发送文本 | 发送图片 | 发送视频 | 发送音频 | 发送文件 |
+| ---------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- |
+| 钉钉       | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        |
+| 飞书       | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        |
+| Discord    | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | 🚧       | 🚧       | 🚧       | 🚧       |
+| iMessage   | ✓        | ✗        | ✗        | ✗        | ✗        | ✓        | ✗        | ✗        | ✗        | ✗        |
+| QQ         | ✓        | 🚧       | 🚧       | 🚧       | 🚧       | ✓        | 🚧       | 🚧       | 🚧       | 🚧       |
+| 企业微信   | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        |
+| 微信个人   | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | 🚧       | 🚧       | 🚧       | 🚧       |
+| Telegram   | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        |
+| Mattermost | ✓        | ✓        | 🚧       | 🚧       | ✓        | ✓        | ✓        | 🚧       | 🚧       | ✓        |
+| Matrix     | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        |
+| 小艺       | ✓        | ✓        | ✗        | ✗        | ✓        | ✓        | 🚧       | 🚧       | 🚧       | 🚧       |
 
 说明：
 
@@ -583,6 +844,10 @@ JSON消息格式
 - **iMessage**：基于本地 imsg + 数据库轮询，仅支持文本收发；平台/实现限制，无法支持附件（✗）。
 - **QQ**：接收侧附件解析为多模态、发送侧真实媒体均为 🚧 施工中，当前仅文本 + 链接形式。
 - **Telegram**：接收时附件会解析为文件并传入，可在telegram对话界面以对应格式打开（图片 / 语音 / 视频 / 文件）
+- **企业微信**：WebSocket 长连接接收，markdown/template_card 发送；支持接收和发送文本、图片、语音、视频和文件。
+- **微信个人（iLink）**：HTTP 长轮询接收，支持文本、图片（AES-128-ECB 解密）、语音（ASR 转录文字）、文件和视频；发送当前仅支持文本（iLink API 限制）。
+- **Matrix**：接收图片 / 视频 / 音频 / 文件（通过 `mxc://` 媒体 URL）；发送时将文件上传至服务器后以原生 Matrix 媒体消息（`m.image`、`m.video`、`m.audio`、`m.file`）发出。
+- **小艺**：支持接收文本、图片（JPEG/PNG/BMP/WEBP）和文件（PDF/DOC/DOCX/PPT/PPTX/XLS/XLSX/TXT）；平台限制不支持视频和音频。
 
 ### 通过 HTTP 修改配置
 
@@ -732,6 +997,93 @@ def build_agent_request_from_native(self, native_payload):
 - **安装**：`copaw channels install <key>` 会在 `custom_channels/` 下生成名为 `<key>.py` 的模板文件，可直接编辑实现；也可用 `--path <本地路径>` 或 `--url <URL>` 从本地/网络复制渠道模块。`copaw channels add <key>` 等价于安装后并写入 config 默认项，且可加 `--path`/`--url`。
 - **删除**：`copaw channels remove <key>` 会从 `custom_channels/` 中删除该渠道模块（仅支持自定义渠道，内置渠道不可删）；加 `--no-keep-config`（默认）会同时从 `config.json` 的 `channels` 中移除对应 key。
 - **Config**：`ChannelConfig` 使用 `extra="allow"`，`config.json` 的 `channels` 下可写任意 key；自定义渠道的配置会保存在 extra 中。配置方式与内置一致：`copaw channels config` 交互式配置，或直接编辑 config。
+
+### HTTP 路由注册
+
+对于需要 Webhook 回调的渠道（如微信、Slack、LINE 等），可以通过在模块中导出 `register_app_routes` 可调用对象来注册自定义 HTTP 路由，无需修改 CoPaw 核心源码。
+
+CoPaw 启动时会扫描 `custom_channels/` 下的模块，发现 `register_app_routes` 后将其与 FastAPI `app` 实例一起调用，渠道即可注册所需的任何路由。
+
+**路由前缀规则**：
+
+| 路由前缀 | 行为                     |
+| -------- | ------------------------ |
+| `/api/`  | 静默注册                 |
+| 其他路径 | 启动时打印警告（不阻断） |
+
+**接口说明 — `register_app_routes(app)`**
+
+- **参数**：`app` — FastAPI 应用实例
+- **返回**：None
+- **作用域**：注册路由、中间件、或 startup/shutdown 事件
+- **错误隔离**：单个渠道注册失败不影响其他渠道
+
+**最简示例 — Echo 频道**：
+
+```
+<workspace>/
+└── custom_channels/
+    └── my_echo/
+        └── __init__.py
+```
+
+```python
+# custom_channels/my_echo/__init__.py
+from copaw.app.channels.base import BaseChannel
+
+class MyEchoChannel(BaseChannel):
+    """最简单的回声频道。"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    async def _listen(self):
+        pass  # 通过 HTTP 回调接收消息
+
+    async def _send(self, target, content, **kwargs):
+        self.logger.info(f"Would send to {target}: {content}")
+
+
+def register_app_routes(app):
+    """注册该频道的 HTTP 路由。"""
+
+    @app.post("/api/my-echo/callback")
+    async def echo_callback(request):
+        """Webhook 入口。"""
+        body = await request.json()
+
+        from copaw.app.channels.base import TextContent
+        channel = MyEchoChannel()
+        channel.enqueue_user_message(
+            user_id=body.get("user_id", "anonymous"),
+            session_id=body.get("session_id", "default"),
+            content=[TextContent(type="text", text=body.get("text", ""))],
+        )
+
+        return {"status": "ok"}
+```
+
+配置 `config.json`：
+
+```json
+{
+  "channels": {
+    "my_echo": {
+      "enabled": true
+    }
+  }
+}
+```
+
+启动后测试：
+
+```bash
+curl -X POST http://localhost:8088/api/my-echo/callback \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "test", "session_id": "test", "text": "Hello!"}'
+```
+
+**实际案例**：微信 ClawBot 集成（[PR #2140](https://github.com/agentscope-ai/CoPaw/pull/2140)、[Issue #2043](https://github.com/agentscope-ai/CoPaw/issues/2043)）通过此机制注册 `/api/wechat/callback` 路由，使用腾讯官方 SDK 处理消息投递。
 
 ---
 

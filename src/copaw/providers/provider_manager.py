@@ -26,7 +26,6 @@ from copaw.providers.ollama_provider import OllamaProvider
 from copaw.providers.openrouter_provider import OpenRouterProvider
 from copaw.constant import SECRET_DIR
 
-
 logger = logging.getLogger(__name__)
 
 

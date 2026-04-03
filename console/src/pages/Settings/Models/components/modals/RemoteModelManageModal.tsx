@@ -742,7 +742,9 @@ export function RemoteModelManageModal({
                                 >
                                   {(m as any).input_modalities?.includes(
                                     "text",
-                                  ) && <SparkTextLine style={{ fontSize: 12 }} />}
+                                  ) && (
+                                    <SparkTextLine style={{ fontSize: 12 }} />
+                                  )}
                                   {(m as any).input_modalities?.includes(
                                     "image",
                                   ) && (
@@ -767,7 +769,9 @@ export function RemoteModelManageModal({
                                   {(m as any).input_modalities?.includes(
                                     "file",
                                   ) && (
-                                    <SparkFilePdfLine style={{ fontSize: 12 }} />
+                                    <SparkFilePdfLine
+                                      style={{ fontSize: 12 }}
+                                    />
                                   )}
                                   {(m as any).output_modalities?.includes(
                                     "image",
@@ -870,7 +874,9 @@ export function RemoteModelManageModal({
                                   size="small"
                                   danger
                                   icon={<DeleteOutlined />}
-                                  onClick={() => handleRemoveModel(m.id, m.name)}
+                                  onClick={() =>
+                                    handleRemoveModel(m.id, m.name)
+                                  }
                                 />
                               </>
                             ) : (

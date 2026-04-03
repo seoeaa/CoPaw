@@ -24,10 +24,28 @@ def get_provider_manager(request: Request) -> ProviderManager:
     return request.app.state.provider_manager
 
 
+def _clear_local_runtime_provider_state(
+    provider_manager: ProviderManager,
+) -> None:
+    """Reset persisted provider state for the managed local runtime."""
+    provider_manager.update_provider(
+        "copaw-local",
+        {
+            "base_url": "",
+            "extra_models": [],
+        },
+    )
+    provider_manager.clear_active_model("copaw-local")
+
+
 class ServerStatus(BaseModel):
     available: bool = Field(
         ...,
         description="Whether llama.cpp is running and responding",
+    )
+    installable: bool = Field(
+        ...,
+        description="Whether the current environment can install llama.cpp",
     )
     installed: bool = Field(..., description="Whether llama.cpp is installed")
     port: Optional[int] = Field(
@@ -86,6 +104,13 @@ class ActionResponse(BaseModel):
     message: str = Field(..., description="Human-readable operation result")
 
 
+class ServerUpdateStatus(BaseModel):
+    has_update: bool = Field(
+        ...,
+        description="Whether a newer llama.cpp package is available",
+    )
+
+
 # =========================================================================
 # llama.cpp server related endpoints
 # ========================================================================
@@ -103,17 +128,32 @@ async def server_available(
     manager: LocalModelManager = Depends(get_local_model_manager),
 ) -> ServerStatus:
     """Check if the local model server is properly installed and ready."""
-    installed = manager.check_llamacpp_installation()
+    installable, install_message = manager.check_llamacpp_installability()
+
+    if not installable:
+        return ServerStatus(
+            available=False,
+            installable=False,
+            installed=False,
+            port=None,
+            model_name=None,
+            message=(
+                install_message
+                or "Current environment does not support llama.cpp"
+            ),
+        )
+
+    installed, message = manager.check_llamacpp_installation()
     ready = False
-    message = ""
 
     if not installed:
         return ServerStatus(
             available=False,
+            installable=installable,
             installed=False,
             port=None,
             model_name=None,
-            message="llama.cpp is not installed",
+            message=message or install_message,
         )
 
     server_state = manager.get_llamacpp_server_status()
@@ -130,18 +170,41 @@ async def server_available(
         except ValueError:
             message = "llama.cpp server status is temporarily unavailable"
     else:
-        message = "llama.cpp server is not running"
+        message = (
+            "llama.cpp server is not running, please start the server first"
+        )
 
     if server_state["running"] and not ready and not message:
         message = "llama.cpp server is not responding"
 
     return ServerStatus(
         available=installed and ready,
+        installable=installable,
         installed=installed,
         port=server_state["port"],
         model_name=server_state["model_name"],
         message=message,
     )
+
+
+@router.get(
+    "/server/update",
+    response_model=ServerUpdateStatus,
+    summary="Check if a llama.cpp update is available",
+)
+async def get_llamacpp_update_status(
+    manager: LocalModelManager = Depends(get_local_model_manager),
+) -> ServerUpdateStatus:
+    """Check whether an installed llama.cpp runtime has an update."""
+    installable, _ = manager.check_llamacpp_installability()
+    if not installable:
+        return ServerUpdateStatus(has_update=False)
+
+    installed, _ = manager.check_llamacpp_installation()
+    if not installed:
+        return ServerUpdateStatus(has_update=False)
+
+    return ServerUpdateStatus(has_update=await manager.has_update())
 
 
 @router.post(
@@ -151,12 +214,15 @@ async def server_available(
 )
 async def start_llamacpp_download(
     manager: LocalModelManager = Depends(get_local_model_manager),
+    provider_manager: ProviderManager = Depends(get_provider_manager),
 ) -> ActionResponse:
     """Start downloading the llama.cpp binary package."""
     try:
-        manager.start_llamacpp_download()
+        server_stopped = await manager.start_llamacpp_download()
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if server_stopped:
+        _clear_local_runtime_provider_state(provider_manager)
     return ActionResponse(
         status="accepted",
         message="llama.cpp download started",
@@ -242,13 +308,7 @@ async def stop_llamacpp_server(
 ) -> ActionResponse:
     """Stop the active llama.cpp server."""
     await model_manager.shutdown_server()
-    provider_manager.update_provider(
-        "copaw-local",
-        {
-            "base_url": "",
-            "extra_models": [],
-        },
-    )
+    _clear_local_runtime_provider_state(provider_manager)
 
     return ActionResponse(
         status="ok",
@@ -295,6 +355,8 @@ async def start_local_model_download(
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return ActionResponse(
         status="accepted",

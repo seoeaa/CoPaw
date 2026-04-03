@@ -9,6 +9,7 @@ import type {
   LocalDownloadSource,
   LocalModelInfo,
   LocalServerStatus,
+  LocalServerUpdateStatus,
 } from "../../../../../api/types";
 import api from "../../../../../api";
 import { useTranslation } from "react-i18next";
@@ -31,11 +32,19 @@ function isSameServerStatus(
 ): boolean {
   return (
     left?.available === right?.available &&
+    left?.installable === right?.installable &&
     left?.installed === right?.installed &&
     left?.port === right?.port &&
     left?.model_name === right?.model_name &&
     left?.message === right?.message
   );
+}
+
+function isSameServerUpdateStatus(
+  left: LocalServerUpdateStatus | null,
+  right: LocalServerUpdateStatus | null,
+): boolean {
+  return left?.has_update === right?.has_update;
 }
 
 function isSameDownloadProgress(
@@ -88,6 +97,8 @@ export function LocalModelManageModal({
   const [serverStatus, setServerStatus] = useState<LocalServerStatus | null>(
     null,
   );
+  const [serverUpdateStatus, setServerUpdateStatus] =
+    useState<LocalServerUpdateStatus | null>(null);
   const [llamacppDownload, setLlamacppDownload] =
     useState<LocalDownloadProgress | null>(null);
   const [modelDownload, setModelDownload] =
@@ -147,6 +158,38 @@ export function LocalModelManageModal({
     [],
   );
 
+  const refreshUpdateStatus = useCallback(
+    async (nextServerStatus?: LocalServerStatus | null) => {
+      const effectiveServerStatus = nextServerStatus ?? serverStatus;
+
+      if (
+        !effectiveServerStatus?.installable ||
+        !effectiveServerStatus.installed
+      ) {
+        const fallbackStatus = { has_update: false };
+        setServerUpdateStatus((prev) =>
+          isSameServerUpdateStatus(prev, fallbackStatus)
+            ? prev
+            : fallbackStatus,
+        );
+        return fallbackStatus;
+      }
+
+      try {
+        const nextUpdateStatus = await api.getLocalServerUpdateStatus();
+        setServerUpdateStatus((prev) =>
+          isSameServerUpdateStatus(prev, nextUpdateStatus)
+            ? prev
+            : nextUpdateStatus,
+        );
+        return nextUpdateStatus;
+      } catch {
+        return null;
+      }
+    },
+    [serverStatus],
+  );
+
   const refreshStatus = useCallback(
     async (showLoading = false) => {
       if (showLoading) {
@@ -163,6 +206,13 @@ export function LocalModelManageModal({
         setServerStatus((prev) =>
           isSameServerStatus(prev, nextServerStatus) ? prev : nextServerStatus,
         );
+        if (!nextServerStatus.installable || !nextServerStatus.installed) {
+          setServerUpdateStatus((prev) =>
+            isSameServerUpdateStatus(prev, { has_update: false })
+              ? prev
+              : { has_update: false },
+          );
+        }
         setLlamacppDownload((prev) =>
           isSameDownloadProgress(prev, nextLlamacppDownload)
             ? prev
@@ -180,6 +230,7 @@ export function LocalModelManageModal({
           nextLlamacppDownload.status === "completed"
         ) {
           message.success(t("models.localLlamacppInstallSuccess"));
+          void refreshUpdateStatus(nextServerStatus);
         }
 
         if (
@@ -230,7 +281,7 @@ export function LocalModelManageModal({
         }
       }
     },
-    [fetchLocalModels, onSaved, stopPolling, t],
+    [fetchLocalModels, onSaved, refreshUpdateStatus, stopPolling, t],
   );
 
   const startPolling = useCallback(() => {
@@ -245,6 +296,7 @@ export function LocalModelManageModal({
 
     void Promise.all([fetchLocalModels(), refreshStatus(true)]).then(
       ([, statuses]) => {
+        void refreshUpdateStatus(statuses?.server ?? null);
         if (
           statuses &&
           (isBusyDownloadStatus(statuses.llamacpp.status) ||
@@ -256,7 +308,14 @@ export function LocalModelManageModal({
     );
 
     return () => stopPolling();
-  }, [fetchLocalModels, open, refreshStatus, startPolling, stopPolling]);
+  }, [
+    fetchLocalModels,
+    open,
+    refreshStatus,
+    refreshUpdateStatus,
+    startPolling,
+    stopPolling,
+  ]);
 
   const handleStartLlamacppDownload = useCallback(async () => {
     const previousLlamacppDownload = llamacppDownload;
@@ -277,6 +336,7 @@ export function LocalModelManageModal({
     try {
       await api.startLlamacppDownload();
       message.success(t("models.localLlamacppInstallStarted"));
+      setServerUpdateStatus({ has_update: false });
       await refreshStatus();
       startPolling();
     } catch (error) {
@@ -479,7 +539,12 @@ export function LocalModelManageModal({
 
   const isModelDownloading = isDownloadActive(modelDownload);
   const isServerBusy = stoppingServer || startingModelName !== null;
+  const isRuntimeInstallable = serverStatus?.installable ?? true;
   const isRuntimeInstalled = Boolean(serverStatus?.installed);
+  const runtimeLockedMessage =
+    !isRuntimeInstallable && serverStatus?.message
+      ? serverStatus.message
+      : t("models.localModelsLockedHint");
   const isCustomDownloadDisabled =
     customModelRepoId.trim().length === 0 || isModelDownloading || isServerBusy;
   const downloadedModelCount = localModels.filter(
@@ -517,87 +582,97 @@ export function LocalModelManageModal({
       <section className={styles.localSection}>
         <LocalRuntimePanel
           serverStatus={serverStatus}
+          hasUpdate={Boolean(serverUpdateStatus?.has_update)}
           progress={llamacppDownload}
           onStart={handleStartLlamacppDownload}
           onCancel={handleCancelLlamacppDownload}
           onStop={handleStopServer}
           stopping={stoppingServer}
         />
-      </section>
-
-      <section className={styles.localSection}>
-        <div className={styles.localSectionHeader}>
-          <div>
-            <div className={styles.localSectionTitle}>
-              {t("models.localModelsSectionTitle")}
+        {!isRuntimeInstalled ? (
+          <div className={styles.localLockedPanel}>
+            <div className={styles.localLockedPanelTitle}>
+              {isRuntimeInstallable
+                ? t("models.localRuntimeMissing")
+                : t("models.localRuntimeUnsupported")}
+            </div>
+            <div className={styles.localLockedPanelDescription}>
+              <div>{runtimeLockedMessage}</div>
+              {!isRuntimeInstallable ? (
+                <div>{t("models.localAlternativeRuntimeHint")}</div>
+              ) : null}
             </div>
           </div>
-        </div>
+        ) : null}
+      </section>
 
-        {isRuntimeInstalled && isModelDownloading ? (
-          <div className={styles.localSectionInfoRow}>
-            <div className={styles.localSectionInfoContent}>
-              <span className={styles.localSectionInfoLabel}>
-                {t("models.localCurrentDownloadTitle")}
-              </span>
-              <span className={styles.localSectionInfoValue}>
-                {currentModelDownloadName}
-              </span>
-              <div className={styles.localRuntimeDownloadRow}>
-                <div className={styles.localRuntimeProgressBlock}>
-                  <div className={styles.localRuntimeProgressBarRow}>
-                    <Progress
-                      className={styles.localRuntimeProgress}
-                      percent={currentModelDownloadPercent ?? 0}
-                      showInfo={false}
-                      status="active"
-                      strokeColor="#ff7f16"
-                      strokeWidth={10}
-                    />
-                    <Tooltip title={t("models.localCancelDownloadAction")}>
-                      <Button
-                        danger
-                        size="small"
-                        icon={<CloseOutlined />}
-                        onClick={() =>
-                          handleCancelModelDownload(currentModelDownloadName)
-                        }
-                      />
-                    </Tooltip>
-                  </div>
-                  <span className={styles.localRuntimeProgressMeta}>
-                    {formatProgressText(modelDownload)}
-                  </span>
-                </div>
+      {isRuntimeInstalled ? (
+        <section className={styles.localSection}>
+          <div className={styles.localSectionHeader}>
+            <div>
+              <div className={styles.localSectionTitle}>
+                {t("models.localModelsSectionTitle")}
               </div>
             </div>
           </div>
-        ) : null}
 
-        {isRuntimeInstalled && currentRunningModelName ? (
-          <div className={styles.localSectionInfoRow}>
-            <span className={styles.localSectionInfoLabel}>
-              {t("models.localEngineCurrentModelLabel")}
-            </span>
-            <span className={styles.localSectionInfoValue}>
-              {currentRunningModelDisplayName}
-            </span>
-          </div>
-        ) : null}
-
-        {isRuntimeInstalled && downloadedModelCount === 0 ? (
-          <div className={styles.localSectionNotice}>
-            {t("models.localNoDownloadedModelsHint")}
-          </div>
-        ) : null}
-
-        {!isRuntimeInstalled ? (
-          <div className={styles.localLockedPanel}>
-            <div className={styles.localLockedPanelDescription}>
-              {t("models.localModelsLockedHint")}
+          {isRuntimeInstalled && isModelDownloading ? (
+            <div className={styles.localSectionInfoRow}>
+              <div className={styles.localSectionInfoContent}>
+                <span className={styles.localSectionInfoLabel}>
+                  {t("models.localCurrentDownloadTitle")}
+                </span>
+                <span className={styles.localSectionInfoValue}>
+                  {currentModelDownloadName}
+                </span>
+                <div className={styles.localRuntimeDownloadRow}>
+                  <div className={styles.localRuntimeProgressBlock}>
+                    <div className={styles.localRuntimeProgressBarRow}>
+                      <Progress
+                        className={styles.localRuntimeProgress}
+                        percent={currentModelDownloadPercent ?? 0}
+                        showInfo={false}
+                        status="active"
+                        strokeColor="#ff7f16"
+                        strokeWidth={10}
+                      />
+                      <Tooltip title={t("models.localCancelDownloadAction")}>
+                        <Button
+                          danger
+                          size="small"
+                          icon={<CloseOutlined />}
+                          onClick={() =>
+                            handleCancelModelDownload(currentModelDownloadName)
+                          }
+                        />
+                      </Tooltip>
+                    </div>
+                    <span className={styles.localRuntimeProgressMeta}>
+                      {formatProgressText(modelDownload)}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        ) : (
+          ) : null}
+
+          {isRuntimeInstalled && currentRunningModelName ? (
+            <div className={styles.localSectionInfoRow}>
+              <span className={styles.localSectionInfoLabel}>
+                {t("models.localEngineCurrentModelLabel")}
+              </span>
+              <span className={styles.localSectionInfoValue}>
+                {currentRunningModelDisplayName}
+              </span>
+            </div>
+          ) : null}
+
+          {isRuntimeInstalled && downloadedModelCount === 0 ? (
+            <div className={styles.localSectionNotice}>
+              {t("models.localNoDownloadedModelsHint")}
+            </div>
+          ) : null}
+
           <div className={styles.modelList}>
             {serverStatus?.installed && loadingLocal ? (
               <div className={styles.modelListEmpty}>{t("common.loading")}</div>
@@ -680,8 +755,8 @@ export function LocalModelManageModal({
               </div>
             ) : null}
           </div>
-        )}
-      </section>
+        </section>
+      ) : null}
     </Modal>
   );
 }

@@ -4,6 +4,7 @@ export interface ModelInfo {
   supports_multimodal: boolean | null;
   supports_image: boolean | null;
   supports_video: boolean | null;
+  generate_kwargs: Record<string, unknown>;
 }
 
 export interface ProviderInfo {
@@ -76,6 +77,10 @@ export interface AddModelRequest {
   name: string;
 }
 
+export interface ModelConfigRequest {
+  generate_kwargs?: Record<string, unknown>;
+}
+
 /* ---- Local models ---- */
 
 export interface LocalModelInfo {
@@ -90,10 +95,15 @@ export type LocalDownloadSource = "huggingface" | "modelscope" | "auto";
 
 export interface LocalServerStatus {
   available: boolean;
+  installable: boolean;
   installed: boolean;
   port: number | null;
   model_name: string | null;
   message: string | null;
+}
+
+export interface LocalServerUpdateStatus {
+  has_update: boolean;
 }
 
 export interface LocalDownloadProgress {

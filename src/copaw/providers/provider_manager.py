@@ -644,8 +644,7 @@ class ActiveModelsInfo(BaseModel):
     active_llm: ModelSlotConfig | None
 
 
-# pylint: disable=too-many-public-methods
-class ProviderManager:
+class ProviderManager:  # pylint: disable=too-many-public-methods
     """A manager class to handle all providers,
     including built-in and custom ones."""
 

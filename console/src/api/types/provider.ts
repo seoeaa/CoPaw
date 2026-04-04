@@ -4,6 +4,7 @@ export interface ModelInfo {
   supports_multimodal: boolean | null;
   supports_image: boolean | null;
   supports_video: boolean | null;
+  generate_kwargs: Record<string, unknown>;
 }
 
 export interface ProviderInfo {
@@ -76,56 +77,60 @@ export interface AddModelRequest {
   name: string;
 }
 
+export interface ModelConfigRequest {
+  generate_kwargs?: Record<string, unknown>;
+}
+
 /* ---- Local models ---- */
 
-export interface LocalModelResponse {
+export interface LocalModelInfo {
   id: string;
-  repo_id: string;
-  filename: string;
-  backend: string;
-  source: string;
-  file_size: number;
-  local_path: string;
-  display_name: string;
+  name: string;
+  size_bytes: number;
+  downloaded: boolean;
+  source: LocalDownloadSource;
 }
 
-export interface DownloadModelRequest {
-  repo_id: string;
-  filename?: string;
-  backend: string;
-  source: string;
+export type LocalDownloadSource = "huggingface" | "modelscope" | "auto";
+
+export interface LocalServerStatus {
+  available: boolean;
+  installable: boolean;
+  installed: boolean;
+  port: number | null;
+  model_name: string | null;
+  message: string | null;
 }
 
-export interface DownloadTaskResponse {
-  task_id: string;
-  status: "pending" | "downloading" | "completed" | "failed" | "cancelled";
-  repo_id: string;
-  filename: string | null;
-  backend: string;
-  source: string;
+export interface LocalServerUpdateStatus {
+  has_update: boolean;
+}
+
+export interface LocalDownloadProgress {
+  status:
+    | "idle"
+    | "pending"
+    | "downloading"
+    | "canceling"
+    | "completed"
+    | "failed"
+    | "cancelled";
+  model_name: string | null;
+  downloaded_bytes: number;
+  total_bytes: number | null;
+  speed_bytes_per_sec: number;
+  source: LocalDownloadSource | null;
   error: string | null;
-  result: LocalModelResponse | null;
+  local_path: string | null;
 }
 
-/* ---- Ollama models ---- */
-
-export interface OllamaModelResponse {
-  name: string;
-  size: number;
-  digest?: string | null;
-  modified_at?: string | null;
+export interface LocalActionResponse {
+  status: string;
+  message: string;
 }
 
-export interface OllamaDownloadRequest {
-  name: string;
-}
-
-export interface OllamaDownloadTaskResponse {
-  task_id: string;
-  status: "pending" | "downloading" | "completed" | "failed" | "cancelled";
-  name: string;
-  error: string | null;
-  result: OllamaModelResponse | null;
+export interface StartLocalServerRequest {
+  model_id: string;
 }
 
 /* ---- Test Connection ---- */

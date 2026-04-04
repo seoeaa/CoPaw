@@ -8,7 +8,7 @@ export { getFileIcon, getSkillVisual } from "./SkillCard";
 export {
   getSkillDisplaySource,
   getPoolBuiltinStatusLabel,
-  getSkillSyncStatusLabel,
+  getPoolBuiltinStatusTone,
 } from "./skillMetadata";
 export { useConflictRenameModal } from "./useConflictRenameModal";
 export { ImportHubModal } from "./ImportHubModal";

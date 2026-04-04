@@ -95,6 +95,15 @@ class QQConfig(BaseChannelConfig):
     max_reconnect_attempts: int = 100
 
 
+class OneBotConfig(BaseChannelConfig):
+    """OneBot v11 channel: reverse WebSocket for NapCat/go-cqhttp/Lagrange."""
+
+    ws_host: str = "0.0.0.0"
+    ws_port: int = 6199
+    access_token: str = ""
+    share_session_in_group: bool = False
+
+
 class TelegramConfig(BaseChannelConfig):
     bot_token: str = ""
     http_proxy: str = ""
@@ -212,6 +221,7 @@ class ChannelConfig(BaseModel):
     wecom: WecomConfig = WecomConfig()
     xiaoyi: XiaoYiConfig = XiaoYiConfig()
     weixin: WeixinConfig = WeixinConfig()
+    onebot: OneBotConfig = OneBotConfig()
 
 
 class LastApiConfig(BaseModel):
@@ -295,7 +305,7 @@ class ContextCompactConfig(BaseModel):
     )
 
     token_count_estimate_divisor: float = Field(
-        default=3.75,
+        default=4,
         ge=2,
         le=5,
         description=(
@@ -684,6 +694,10 @@ class AgentsConfig(BaseModel):
         default="default",
         description="Currently active agent ID",
     )
+    agent_order: List[str] = Field(
+        default_factory=lambda: ["default"],
+        description="Persisted UI order for configured agents",
+    )
     profiles: Dict[str, AgentProfileRef] = Field(
         default_factory=lambda: {
             "default": AgentProfileRef(
@@ -912,8 +926,13 @@ def _default_builtin_tools() -> Dict[str, BuiltinToolConfig]:
         "view_image": BuiltinToolConfig(
             name="view_image",
             enabled=True,
-            description="Load an image into LLM context "
-            "for visual analysis",
+            description="Load an image into LLM context for visual analysis",
+            display_to_user=False,
+        ),
+        "view_video": BuiltinToolConfig(
+            name="view_video",
+            enabled=True,
+            description="Load a video into LLM context for visual analysis",
             display_to_user=False,
         ),
         "send_file_to_user": BuiltinToolConfig(

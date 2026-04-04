@@ -15,7 +15,6 @@ from agentscope.model import ChatModelBase
 
 from copaw.providers.provider import (
     ModelInfo,
-    DefaultProvider,
     Provider,
     ProviderInfo,
 )
@@ -25,7 +24,7 @@ from copaw.providers.anthropic_provider import AnthropicProvider
 from copaw.providers.gemini_provider import GeminiProvider
 from copaw.providers.ollama_provider import OllamaProvider
 from copaw.constant import SECRET_DIR
-from copaw.local_models import create_local_chat_model
+
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +128,37 @@ ALIYUN_CODINGPLAN_MODELS: List[ModelInfo] = [
         id="qwen3-coder-plus",
         name="Qwen3 Coder Plus",
         supports_image=False,
+        supports_video=False,
+        probe_source="documentation",
+    ),
+]
+
+ZHIPU_MODELS: List[ModelInfo] = [
+    ModelInfo(
+        id="glm-5",
+        name="glm-5",
+        supports_image=False,
+        supports_video=False,
+        probe_source="documentation",
+    ),
+    ModelInfo(
+        id="glm-5.1",
+        name="glm-5.1",
+        supports_image=False,
+        supports_video=False,
+        probe_source="documentation",
+    ),
+    ModelInfo(
+        id="glm-5-turbo",
+        name="glm-5-turbo",
+        supports_image=False,
+        supports_video=False,
+        probe_source="documentation",
+    ),
+    ModelInfo(
+        id="glm-5v-turbo",
+        name="glm-5v-turbo",
+        supports_image=True,
         supports_video=False,
         probe_source="documentation",
     ),
@@ -449,16 +479,47 @@ PROVIDER_ALIYUN_CODINGPLAN = OpenAIProvider(
     freeze_url=True,
 )
 
-PROVIDER_LLAMACPP = DefaultProvider(
-    id="llamacpp",
-    name="llama.cpp (Local)",
-    is_local=True,
-    require_api_key=False,
+PROVIDER_ZHIPU_CN = OpenAIProvider(
+    id="zhipu-cn",
+    name="Zhipu (BigModel)",
+    base_url="https://open.bigmodel.cn/api/paas/v4",
+    api_key_prefix="",
+    models=ZHIPU_MODELS,
+    freeze_url=True,
 )
 
-PROVIDER_MLX = DefaultProvider(
-    id="mlx",
-    name="MLX (Local, Apple Silicon)",
+PROVIDER_ZHIPU_CN_CODINGPLAN = OpenAIProvider(
+    id="zhipu-cn-codingplan",
+    name="Zhipu Coding Plan (BigModel)",
+    base_url="https://open.bigmodel.cn/api/coding/paas/v4",
+    api_key_prefix="",
+    models=ZHIPU_MODELS,
+    freeze_url=True,
+    support_connection_check=False,
+)
+
+PROVIDER_ZHIPU_INTL = OpenAIProvider(
+    id="zhipu-intl",
+    name="Zhipu (Z.AI)",
+    base_url="https://api.z.ai/api/paas/v4",
+    api_key_prefix="",
+    models=ZHIPU_MODELS,
+    freeze_url=True,
+)
+
+PROVIDER_ZHIPU_INTL_CODINGPLAN = OpenAIProvider(
+    id="zhipu-intl-codingplan",
+    name="Zhipu Coding Plan (Z.AI)",
+    base_url="https://api.z.ai/api/coding/paas/v4",
+    api_key_prefix="",
+    models=ZHIPU_MODELS,
+    freeze_url=True,
+    support_connection_check=False,
+)
+
+PROVIDER_COPAW = OpenAIProvider(
+    id="copaw-local",
+    name="CoPaw Local",
     is_local=True,
     require_api_key=False,
 )
@@ -550,6 +611,7 @@ PROVIDER_GEMINI = GeminiProvider(
 PROVIDER_OLLAMA = OllamaProvider(
     id="ollama",
     name="Ollama",
+    is_local=True,
     require_api_key=False,
     support_model_discovery=True,
     generate_kwargs={"max_tokens": None},
@@ -558,6 +620,7 @@ PROVIDER_OLLAMA = OllamaProvider(
 PROVIDER_LMSTUDIO = OpenAIProvider(
     id="lmstudio",
     name="LM Studio",
+    is_local=True,
     base_url="http://localhost:1234/v1",
     require_api_key=False,
     api_key_prefix="",
@@ -570,7 +633,7 @@ class ActiveModelsInfo(BaseModel):
     active_llm: ModelSlotConfig | None
 
 
-class ProviderManager:
+class ProviderManager:  # pylint: disable=too-many-public-methods
     """A manager class to handle all providers,
     including built-in and custom ones."""
 
@@ -593,7 +656,6 @@ class ProviderManager:
             logger.warning("Failed to migrate legacy providers: %s", e)
         self._init_from_storage()
         self._apply_default_annotations()
-        self.update_local_models()
 
     def _prepare_disk_storage(self):
         """Prepare directory structure"""
@@ -605,22 +667,25 @@ class ProviderManager:
                 pass
 
     def _init_builtins(self):
+        self._add_builtin(PROVIDER_COPAW)
+        self._add_builtin(PROVIDER_OLLAMA)
+        self._add_builtin(PROVIDER_LMSTUDIO)
         self._add_builtin(PROVIDER_MODELSCOPE)
         self._add_builtin(PROVIDER_DASHSCOPE)
         self._add_builtin(PROVIDER_ALIYUN_CODINGPLAN)
         self._add_builtin(PROVIDER_OPENAI)
         self._add_builtin(PROVIDER_AZURE_OPENAI)
-        self._add_builtin(PROVIDER_KIMI_CN)
-        self._add_builtin(PROVIDER_KIMI_INTL)
-        self._add_builtin(PROVIDER_DEEPSEEK)
         self._add_builtin(PROVIDER_ANTHROPIC)
         self._add_builtin(PROVIDER_GEMINI)
+        self._add_builtin(PROVIDER_DEEPSEEK)
+        self._add_builtin(PROVIDER_KIMI_CN)
+        self._add_builtin(PROVIDER_KIMI_INTL)
         self._add_builtin(PROVIDER_MINIMAX_CN)
         self._add_builtin(PROVIDER_MINIMAX)
-        self._add_builtin(PROVIDER_OLLAMA)
-        self._add_builtin(PROVIDER_LMSTUDIO)
-        self._add_builtin(PROVIDER_LLAMACPP)
-        self._add_builtin(PROVIDER_MLX)
+        self._add_builtin(PROVIDER_ZHIPU_CN)
+        self._add_builtin(PROVIDER_ZHIPU_CN_CODINGPLAN)
+        self._add_builtin(PROVIDER_ZHIPU_INTL)
+        self._add_builtin(PROVIDER_ZHIPU_INTL_CODINGPLAN)
 
     def _add_builtin(self, provider: Provider):
         self.builtin_providers[provider.id] = provider
@@ -666,6 +731,29 @@ class ProviderManager:
             is_builtin=provider_id in self.builtin_providers,
         )
         return True
+
+    def start_local_model_resume(self, local_manager) -> None:
+        """Schedule background restore of the active local model server."""
+        task = asyncio.create_task(
+            self._resume_local_model(local_manager),
+            name="copaw-local-model-resume",
+        )
+        task.add_done_callback(self._on_local_model_resume_done)
+
+    @staticmethod
+    def _on_local_model_resume_done(task: asyncio.Task[None]) -> None:
+        """Log unexpected failures from background local model restore."""
+        if task.cancelled():
+            return
+
+        exc = task.exception()
+        if exc is not None:
+            logger.warning(
+                "Background local model restore failed: %s",
+                exc,
+                exc_info=exc,
+            )
+        logger.info("Background local model restore completed")
 
     async def fetch_provider_models(
         self,
@@ -757,9 +845,6 @@ class ProviderManager:
     def maybe_probe_multimodal(self, provider_id: str, model_id: str) -> None:
         """Schedule multimodal probing for a model if capability is unknown."""
         provider = self.get_provider(provider_id)
-        if provider is None or provider.is_local:
-            return
-
         # Auto-probe multimodal if not yet probed
         for model in provider.models + provider.extra_models:
             if model.id == model_id and model.supports_multimodal is None:
@@ -795,6 +880,26 @@ class ProviderManager:
         if not provider:
             raise ValueError(f"Provider '{provider_id}' not found.")
         await provider.add_model(model_info)
+        self._save_provider(
+            provider,
+            is_builtin=provider_id in self.builtin_providers,
+        )
+        return await provider.get_info()
+
+    async def update_model_config(
+        self,
+        provider_id: str,
+        model_id: str,
+        config: Dict,
+    ) -> ProviderInfo:
+        """Update per-model configuration and persist to disk."""
+        provider = self.get_provider(provider_id)
+        if not provider:
+            raise ValueError(f"Provider '{provider_id}' not found.")
+        if not provider.update_model_config(model_id, config):
+            raise ValueError(
+                f"Model '{model_id}' not found in provider '{provider_id}'.",
+            )
         self._save_provider(
             provider,
             is_builtin=provider_id in self.builtin_providers,
@@ -927,8 +1032,6 @@ class ProviderManager:
             return GeminiProvider.model_validate(data)
         if provider_id == "ollama":
             return OllamaProvider.model_validate(data)
-        if data.get("is_local", False):
-            return DefaultProvider.model_validate(data)
         return OpenAIProvider.model_validate(data)
 
     def save_active_model(self, active_model: ModelSlotConfig):
@@ -945,6 +1048,28 @@ class ProviderManager:
             os.chmod(active_path, 0o600)
         except OSError:
             pass
+
+    def clear_active_model(self, provider_id: str | None = None) -> bool:
+        """Clear the active provider/model configuration.
+
+        If provider_id is provided, only clear when it matches the current
+        active provider.
+        """
+        if self.active_model is None:
+            return False
+        if (
+            provider_id is not None
+            and self.active_model.provider_id != provider_id
+        ):
+            return False
+
+        self.active_model = None
+        active_path = self.root_path / "active_model.json"
+        try:
+            active_path.unlink()
+        except (FileNotFoundError, OSError):
+            pass
+        return True
 
     def load_active_model(self) -> ModelSlotConfig | None:
         """Load the active provider/model configuration from disk."""
@@ -1036,6 +1161,18 @@ class ProviderManager:
                 builtin.api_key = provider.api_key
                 builtin.extra_models = provider.extra_models
                 builtin.generate_kwargs.update(provider.generate_kwargs)
+                # Restore per-model generate_kwargs for built-in models
+                stored_model_kwargs = {
+                    m.id: m.generate_kwargs
+                    for m in provider.models
+                    if m.generate_kwargs
+                }
+                if stored_model_kwargs:
+                    for model in builtin.models:
+                        if model.id in stored_model_kwargs:
+                            model.generate_kwargs = stored_model_kwargs[
+                                model.id
+                            ]
         # Load custom providers
         for provider_file in self.custom_path.glob("*.json"):
             provider = self.load_provider(provider_file.stem, is_builtin=False)
@@ -1083,26 +1220,46 @@ class ProviderManager:
                     )
                     model.probe_source = "documentation"
 
-    def update_local_models(self):
-        """Update the model list of a local provider."""
+    async def _resume_local_model(self, local_manager) -> None:
+        """Resume the active local model server from the previous run."""
+        local_models = self.get_provider("copaw-local").extra_models
+        model_id = local_models[0].id if local_models else None
+        if model_id is None:
+            return
+
+        installed, _ = local_manager.check_llamacpp_installation()
+        if not installed:
+            logger.info(
+                "Skipping local model restore because llama.cpp is not "
+                "installed.",
+            )
+            return
+
+        if not local_manager.is_model_downloaded(model_id):
+            logger.warning(
+                "Skipping local model restore because model is not "
+                "downloaded: %s",
+                model_id,
+            )
+            return
+
         try:
-            from ..local_models.manager import list_local_models
-            from ..local_models.schema import BackendType
+            port = await local_manager.setup_server(model_id)
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            logger.warning(
+                "Failed to restore local model server for %s: %s",
+                model_id,
+                exc,
+            )
+            return
 
-            llamacpp_models: list[ModelInfo] = []
-            mlx_models: list[ModelInfo] = []
-
-            for model in list_local_models():
-                info = ModelInfo(id=model.id, name=model.display_name)
-                if model.backend == BackendType.LLAMACPP:
-                    llamacpp_models.append(info)
-                elif model.backend == BackendType.MLX:
-                    mlx_models.append(info)
-            PROVIDER_LLAMACPP.models = llamacpp_models
-            PROVIDER_MLX.models = mlx_models
-        except ImportError:
-            # local_models dependencies not installed; leave model lists empty
-            pass
+        self.update_provider(
+            "copaw-local",
+            {
+                "base_url": f"http://127.0.0.1:{port}/v1",
+                "extra_models": [ModelInfo(id=model_id, name=model_id)],
+            },
+        )
 
     @staticmethod
     def get_instance() -> "ProviderManager":
@@ -1122,11 +1279,5 @@ class ProviderManager:
         if provider is None:
             raise ValueError(
                 f"Active provider '{model.provider_id}' not found.",
-            )
-        if provider.is_local:
-            return create_local_chat_model(
-                model_id=model.model,
-                stream=True,
-                generate_kwargs={"max_tokens": None},
             )
         return provider.get_chat_model_instance(model.model)

@@ -99,6 +99,16 @@ class AddModelRequest(BaseModel):
     name: str = Field(...)
 
 
+class ModelConfigRequest(BaseModel):
+    generate_kwargs: Optional[dict] = Field(
+        default_factory=dict,
+        description=(
+            "Per-model generation parameters in JSON format. "
+            "These override provider-level generate_kwargs."
+        ),
+    )
+
+
 def _validate_model_slot(
     manager: ProviderManager,
     provider_id: str,
@@ -282,9 +292,9 @@ async def test_provider(
         ok, msg = await tmp_provider.check_connection()
         return TestConnectionResponse(
             success=ok,
-            message="Connection successful"
-            if ok
-            else f"Connection failed: {msg}",
+            message=(
+                "Connection successful" if ok else f"Connection failed: {msg}"
+            ),
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -453,6 +463,30 @@ async def remove_model_endpoint(
     return provider
 
 
+@router.put(
+    "/{provider_id}/models/{model_id:path}/config",
+    response_model=ProviderInfo,
+    summary="Configure per-model generation parameters",
+)
+async def configure_model(
+    manager: ProviderManager = Depends(get_provider_manager),
+    provider_id: str = Path(...),
+    model_id: str = Path(...),
+    body: ModelConfigRequest = Body(...),
+) -> ProviderInfo:
+    """Update per-model generate_kwargs that override provider-level
+    settings."""
+    try:
+        provider_info = await manager.update_model_config(
+            provider_id=provider_id,
+            model_id=model_id,
+            config={"generate_kwargs": body.generate_kwargs},
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return provider_info
+
+
 @router.get(
     "/active",
     response_model=ActiveModelsInfo,
@@ -523,13 +557,12 @@ async def set_active_model(
     if body.scope == "global":
         try:
             await manager.activate_model(body.provider_id, body.model)
-        except ValueError as exc:
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
             message = str(exc)
             lower_msg = message.lower()
             if "provider" in lower_msg and "not found" in lower_msg:
                 raise HTTPException(status_code=404, detail=message) from exc
             raise HTTPException(status_code=400, detail=message) from exc
-
         return ActiveModelsInfo(active_llm=manager.get_active_model())
 
     if not body.agent_id:

@@ -38,6 +38,11 @@ class ModelInfo(BaseModel):
             " or 'probed' (actual probe)"
         ),
     )
+    generate_kwargs: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Per-model generation parameters that override "
+        "provider-level generate_kwargs.",
+    )
 
 
 class ProviderInfo(BaseModel):
@@ -172,6 +177,13 @@ class Provider(ProviderInfo, ABC):
             and isinstance(config["generate_kwargs"], dict)
         ):
             self.generate_kwargs = config["generate_kwargs"]
+        if "extra_models" in config and config["extra_models"] is not None:
+            self.extra_models = [
+                model
+                if isinstance(model, ModelInfo)
+                else ModelInfo.model_validate(model)
+                for model in config["extra_models"]
+            ]
 
     def get_chat_model_cls(self) -> Type[ChatModelBase]:
         """Return the chat model class associated with this provider."""
@@ -188,6 +200,57 @@ class Provider(ProviderInfo, ABC):
                 f" for provider '{self.name}'.",
             )
         return chat_model_cls
+
+    @staticmethod
+    def _deep_merge(
+        base: Dict[str, Any],
+        override: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Recursively merge *override* into *base* (returns a new dict)."""
+        result = dict(base)
+        for key, val in override.items():
+            if (
+                key in result
+                and isinstance(result[key], dict)
+                and isinstance(val, dict)
+            ):
+                result[key] = Provider._deep_merge(result[key], val)
+            else:
+                result[key] = val
+        return result
+
+    def get_effective_generate_kwargs(self, model_id: str) -> Dict[str, Any]:
+        """Return merged generate_kwargs: provider-level as base, model-level
+        overrides on top (deep merge for nested dicts).
+
+        Always returns a new dict so callers never mutate provider state.
+        """
+        for model in self.models + self.extra_models:
+            if model.id == model_id:
+                if model.generate_kwargs:
+                    return self._deep_merge(
+                        self.generate_kwargs,
+                        model.generate_kwargs,
+                    )
+                break
+        return dict(self.generate_kwargs)
+
+    def update_model_config(
+        self,
+        model_id: str,
+        config: Dict,
+    ) -> bool:
+        """Update per-model configuration (e.g. generate_kwargs)."""
+        for model in self.models + self.extra_models:
+            if model.id == model_id:
+                if (
+                    "generate_kwargs" in config
+                    and config["generate_kwargs"] is not None
+                    and isinstance(config["generate_kwargs"], dict)
+                ):
+                    model.generate_kwargs = config["generate_kwargs"]
+                return True
+        return False
 
     def has_model(self, model_id: str) -> bool:
         """Check if the provider has a model with the given ID."""
@@ -239,33 +302,4 @@ class Provider(ProviderInfo, ABC):
             freeze_url=self.freeze_url,
             require_api_key=self.require_api_key,
             generate_kwargs=self.generate_kwargs,
-        )
-
-
-class DefaultProvider(Provider):
-    """Default provider implementation with no-op methods."""
-
-    async def check_connection(self, timeout: float = 5) -> tuple[bool, str]:
-        if len(self.models) > 0:
-            return True, ""
-        return False, "No models available in the default provider"
-
-    async def fetch_models(self, timeout: float = 5) -> List[ModelInfo]:
-        return self.models
-
-    async def check_model_connection(
-        self,
-        model_id: str,
-        timeout: float = 5,
-    ) -> tuple[bool, str]:
-        if model_id in {model.id for model in self.models}:
-            return True, ""
-        return False, f"Model '{model_id}' not found"
-
-    def update_config(self, config: Dict) -> None:
-        pass
-
-    def get_chat_model_instance(self, model_id: str) -> ChatModelBase:
-        raise NotImplementedError(
-            "DefaultProvider does not implement chat model",
         )

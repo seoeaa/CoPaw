@@ -1,7 +1,7 @@
-import { Card, Button, Tooltip } from "@agentscope-ai/design";
+import React from "react";
+import { Card, Button, Checkbox } from "@agentscope-ai/design";
 import {
   CalendarFilled,
-  DeleteOutlined,
   FileTextFilled,
   FileZipFilled,
   FilePdfFilled,
@@ -10,18 +10,20 @@ import {
   FilePptFilled,
   FileImageFilled,
   CodeFilled,
+  EyeOutlined,
+  EyeInvisibleOutlined,
 } from "@ant-design/icons";
+import dayjs from "dayjs";
 import type { SkillSpec } from "../../../../api/types";
 import { useTranslation } from "react-i18next";
 import styles from "../index.module.less";
-import {
-  getSkillDisplaySource,
-  getSkillSyncStatusLabel,
-} from "./skillMetadata";
+import { getSkillDisplaySource } from "./skillMetadata";
 
 interface SkillCardProps {
   skill: SkillSpec;
   isHover: boolean;
+  selected?: boolean;
+  onSelect?: (e: React.MouseEvent) => void;
   onClick: () => void;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
@@ -44,25 +46,30 @@ const normalizeSkillIconKey = (value: string) =>
 
 export const getFileIcon = (filePath: string) => {
   const skillKey = normalizeSkillIconKey(filePath);
+  const textSkillIcons = new Set([
+    "news",
+    "file_reader",
+    "browser_visible",
+    "guidance",
+    "himalaya",
+    "dingtalk_channel",
+  ]);
+
+  if (textSkillIcons.has(skillKey)) {
+    return <FileTextFilled style={{ color: "#1890ff" }} />;
+  }
 
   switch (skillKey) {
     case "docx":
-      return <FileWordFilled style={{ color: "#2b579a" }} />;
+      return <FileWordFilled style={{ color: "#2B8DFF" }} />;
     case "xlsx":
-      return <FileExcelFilled style={{ color: "#217346" }} />;
+      return <FileExcelFilled style={{ color: "#44C161" }} />;
     case "pptx":
-      return <FilePptFilled style={{ color: "#d24726" }} />;
+      return <FilePptFilled style={{ color: "#FF5B3B" }} />;
     case "pdf":
-      return <FilePdfFilled style={{ color: "#f5222d" }} />;
+      return <FilePdfFilled style={{ color: "#F04B57" }} />;
     case "cron":
       return <CalendarFilled style={{ color: "#13c2c2" }} />;
-    case "news":
-    case "file_reader":
-    case "browser_visible":
-    case "guidance":
-    case "himalaya":
-    case "dingtalk_channel":
-      return <FileTextFilled style={{ color: "#1890ff" }} />;
     default:
       break;
   }
@@ -81,16 +88,16 @@ export const getFileIcon = (filePath: string) => {
     case "gz":
       return <FileZipFilled style={{ color: "#fa8c16" }} />;
     case "pdf":
-      return <FilePdfFilled style={{ color: "#f5222d" }} />;
+      return <FilePdfFilled style={{ color: "#F04B57" }} />;
     case "doc":
     case "docx":
-      return <FileWordFilled style={{ color: "#2b579a" }} />;
+      return <FileWordFilled style={{ color: "#2B8DFF" }} />;
     case "xls":
     case "xlsx":
-      return <FileExcelFilled style={{ color: "#217346" }} />;
+      return <FileExcelFilled style={{ color: "#44C161" }} />;
     case "ppt":
     case "pptx":
-      return <FilePptFilled style={{ color: "#d24726" }} />;
+      return <FilePptFilled style={{ color: "#FF5B3B" }} />;
     case "jpg":
     case "jpeg":
     case "png":
@@ -124,9 +131,11 @@ export const getSkillVisual = (name: string, content?: string) => {
   return getFileIcon(name);
 };
 
-export function SkillCard({
+export const SkillCard = React.memo(function SkillCard({
   skill,
   isHover,
+  selected,
+  onSelect,
   onClick,
   onMouseEnter,
   onMouseLeave,
@@ -136,36 +145,78 @@ export function SkillCard({
   const { t } = useTranslation();
   const displaySource = getSkillDisplaySource(skill.source);
   const isBuiltin = displaySource === "builtin";
-  const syncStatusLabel = getSkillSyncStatusLabel(
-    skill.sync_to_pool?.status,
-    t,
-  );
+  const batchMode = selected !== undefined;
+
+  const handleToggleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleEnabled(e);
+  };
 
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!skill.enabled && onDelete) {
-      onDelete(e);
+    onDelete?.(e);
+  };
+
+  const handleSelectClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onSelect?.(e);
+  };
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (batchMode && onSelect) {
+      onSelect(e);
+    } else {
+      onClick();
     }
   };
 
   return (
     <Card
       hoverable
-      onClick={onClick}
+      onClick={handleCardClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={`${styles.skillCard} ${
         skill.enabled ? styles.enabledCard : ""
-      } ${isHover ? styles.hover : styles.normal}`}
+      } ${isHover ? styles.hover : styles.normal} ${
+        selected ? styles.selectedCard : ""
+      }`}
     >
-      <div className={styles.cardBody}>
-        <div className={styles.cardHeader}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span className={styles.fileIcon}>
-              {getSkillVisual(skill.name, skill.content)}
-            </span>
+      {/* Header: Icon + Title + Badge + Status + Select */}
+      <div className={styles.cardHeader}>
+        <div className={styles.leftSection}>
+          <span className={styles.fileIcon}>
+            {getSkillVisual(skill.name, skill.content)}
+          </span>
+          <div className={styles.titleRow}>
             <h3 className={styles.skillTitle}>{skill.name}</h3>
+            <span className={styles.typeBadge}>
+              {isBuiltin ? t("skills.builtin") : t("skills.custom")}
+            </span>
           </div>
+          {/* Meta Info: Channels, Pool Sync - moved here */}
+          <div className={styles.metaContainer}>
+            <div className={styles.metaItem}>
+              <span className={styles.metaLabel}>{t("skills.channels")}</span>
+              <span className={styles.channelValue}>
+                {(skill.channels || ["all"])
+                  .map((ch) => (ch === "all" ? t("skills.allChannels") : ch))
+                  .join(", ")}
+              </span>
+            </div>
+            {skill.last_updated && (
+              <div className={styles.metaItem}>
+                <span className={styles.metaLabel}>
+                  {t("skills.lastUpdated")}
+                </span>
+                <span className={styles.metaValue}>
+                  {dayjs(skill.last_updated).fromNow()}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className={styles.statusWithSelect}>
           <div className={styles.statusContainer}>
             <span
               className={`${styles.statusDot} ${
@@ -180,69 +231,41 @@ export function SkillCard({
               {skill.enabled ? t("common.enabled") : t("common.disabled")}
             </span>
           </div>
-        </div>
-
-        <div className={styles.descriptionSection}>
-          <div className={styles.infoLabel}>{t("skills.skillDescription")}</div>
-          <Tooltip
-            title={skill.description || "-"}
-            placement="top"
-            overlayStyle={{ maxWidth: 360 }}
-          >
-            <div className={`${styles.infoBlock} ${styles.descriptionContent}`}>
-              {skill.description || "-"}
-            </div>
-          </Tooltip>
-        </div>
-
-        <div className={styles.metaStack}>
-          <div className={styles.infoSection}>
-            <div className={styles.infoLabel}>{t("skills.type")}</div>
-            <div>
-              <span
-                className={isBuiltin ? styles.builtinTag : styles.customizedTag}
-              >
-                {displaySource}
-              </span>
-            </div>
-          </div>
-
-          <div className={styles.infoSection}>
-            <div className={styles.infoLabel}>{t("skills.channels")}</div>
-            <div className={styles.infoBlock}>
-              {(skill.channels || ["all"]).join(", ")}
-            </div>
-          </div>
-
-          <div className={styles.infoSection}>
-            <div className={styles.infoLabel}>{t("skills.poolSync")}</div>
-            <div className={styles.infoBlock}>{syncStatusLabel}</div>
-          </div>
+          {batchMode && (
+            <Checkbox checked={selected} onClick={handleSelectClick} />
+          )}
         </div>
       </div>
 
+      {/* Description Section */}
+      <div className={styles.descriptionContainer}>
+        <p className={styles.descriptionLabel}>
+          {t("skills.skillDescription")}
+        </p>
+        <p className={styles.descriptionText}>{skill.description || "-"}</p>
+      </div>
+
+      {/* Footer with buttons - always show, disabled in batch mode */}
       <div className={styles.cardFooter}>
         <Button
-          type="link"
-          size="small"
-          onClick={onToggleEnabled}
           className={styles.actionButton}
+          onClick={handleToggleClick}
+          icon={skill.enabled ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+          disabled={batchMode}
         >
           {skill.enabled ? t("common.disable") : t("common.enable")}
         </Button>
-
         {onDelete && (
           <Button
-            type="text"
-            size="small"
             danger
-            icon={<DeleteOutlined />}
             className={styles.deleteButton}
             onClick={handleDeleteClick}
-            disabled={skill.enabled}
-          />
+            disabled={batchMode}
+          >
+            {t("common.delete")}
+          </Button>
         )}
       </div>
     </Card>
   );
-}
+});

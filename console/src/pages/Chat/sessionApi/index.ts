@@ -393,6 +393,13 @@ class SessionApi implements IAgentScopeRuntimeWebUISessionAPI {
   private sessionList: IAgentScopeRuntimeWebUISession[] = [];
 
   /**
+   * When set, getSessionList will move the matching session to the front on the first call,
+   * so the library's useMount auto-selects it instead of always defaulting to sessions[0].
+   * Cleared after first use.
+   */
+  preferredChatId: string | null = null;
+
+  /**
    * Cache the latest user message for a chat so it can be patched into
    * history during reconnect (the backend only persists it after generation
    * completes). Persisted to sessionStorage so it survives page refresh.
@@ -532,29 +539,50 @@ class SessionApi implements IAgentScopeRuntimeWebUISessionAPI {
     return s?.realId ?? null;
   }
 
+  /** Apply listChats to sessionList; merge realId and generating by session_id. */
+  private applyChatsToSessionList(
+    chats: ChatSpec[],
+  ): IAgentScopeRuntimeWebUISession[] {
+    const newList = chats
+      .filter((c) => c.id && c.id !== "undefined" && c.id !== "null")
+      .map(chatSpecToSession)
+      .reverse();
+
+    this.sessionList = newList.map((s) => {
+      const existing = this.sessionList.find(
+        (e) =>
+          (e as ExtendedSession).sessionId === (s as ExtendedSession).sessionId,
+      ) as ExtendedSession | undefined;
+      if (!existing) return s;
+      const next = { ...s } as ExtendedSession;
+      if (existing.realId) {
+        next.id = existing.id;
+        next.realId = existing.realId;
+      }
+      if (existing.generating !== undefined) {
+        next.generating = existing.generating;
+      }
+      return next as IAgentScopeRuntimeWebUISession;
+    });
+    if (this.preferredChatId) {
+      const preferredId = this.preferredChatId;
+      this.preferredChatId = null;
+      const idx = this.sessionList.findIndex((s) => s.id === preferredId);
+      if (idx > 0) {
+        const [preferred] = this.sessionList.splice(idx, 1);
+        this.sessionList.unshift(preferred);
+      }
+    }
+    return [...this.sessionList];
+  }
+
   async getSessionList() {
     if (this.sessionListRequest) return this.sessionListRequest;
 
     this.sessionListRequest = (async () => {
       try {
         const chats = await api.listChats();
-        const newList = chats
-          .filter((c) => c.id && c.id !== "undefined" && c.id !== "null")
-          .map(chatSpecToSession)
-          .reverse();
-
-        this.sessionList = newList.map((s) => {
-          const existing = this.sessionList.find(
-            (e) =>
-              (e as ExtendedSession).sessionId ===
-              (s as ExtendedSession).sessionId,
-          ) as ExtendedSession | undefined;
-          return existing?.realId
-            ? { ...s, id: existing.id, realId: existing.realId }
-            : s;
-        });
-
-        return [...this.sessionList];
+        return this.applyChatsToSessionList(chats);
       } finally {
         this.sessionListRequest = null;
       }

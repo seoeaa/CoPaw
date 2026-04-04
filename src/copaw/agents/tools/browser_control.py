@@ -234,10 +234,17 @@ def _tool_response(text: str) -> ToolResponse:
 
 
 def _chromium_launch_args() -> list[str]:
-    """Extra args for Chromium when running in container."""
+    """Extra args for Chromium when running in container or Windows."""
+    args = []
+    if is_running_in_container() or sys.platform == "win32":
+        args.extend(["--no-sandbox"])
+
     if is_running_in_container():
-        return ["--no-sandbox", "--disable-dev-shm-usage"]
-    return []
+        args.extend(["--disable-dev-shm-usage"])
+    # Windows always needs --disable-gpu to run properly
+    if sys.platform == "win32":
+        args.extend(["--disable-gpu"])
+    return args
 
 
 def _chromium_executable_path() -> str | None:
@@ -616,9 +623,15 @@ def _start_idle_watchdog(state: dict) -> None:
 
 
 def _cancel_idle_watchdog(state: dict) -> None:
-    """Cancel the idle watchdog, if running."""
+    """Cancel the idle watchdog, if running.
+
+    Note: If called from within the watchdog task itself (e.g., during _action_stop
+    triggered by idle timeout), we don't cancel the current task - just clear the
+    reference and let the watchdog exit naturally after _action_stop returns.
+    """
     task = state.get("_idle_task")
-    if task and not task.done():
+    current = asyncio.current_task()
+    if task and not task.done() and task is not current:
         task.cancel()
     state["_idle_task"] = None
 
@@ -1080,16 +1093,16 @@ async def _action_screenshot(
                 await _run_sync(
                     locator.screenshot,
                     path=path,
-                    type=screenshot_type
-                    if screenshot_type == "jpeg"
-                    else "png",
+                    type=(
+                        screenshot_type if screenshot_type == "jpeg" else "png"
+                    ),
                 )
             else:
                 await locator.screenshot(
                     path=path,
-                    type=screenshot_type
-                    if screenshot_type == "jpeg"
-                    else "png",
+                    type=(
+                        screenshot_type if screenshot_type == "jpeg" else "png"
+                    ),
                 )
         else:
             if frame_selector and frame_selector.strip():
@@ -1099,16 +1112,20 @@ async def _action_screenshot(
                     await _run_sync(
                         locator.screenshot,
                         path=path,
-                        type=screenshot_type
-                        if screenshot_type == "jpeg"
-                        else "png",
+                        type=(
+                            screenshot_type
+                            if screenshot_type == "jpeg"
+                            else "png"
+                        ),
                     )
                 else:
                     await locator.screenshot(
                         path=path,
-                        type=screenshot_type
-                        if screenshot_type == "jpeg"
-                        else "png",
+                        type=(
+                            screenshot_type
+                            if screenshot_type == "jpeg"
+                            else "png"
+                        ),
                     )
             else:
                 if _USE_SYNC_PLAYWRIGHT:
@@ -1116,17 +1133,21 @@ async def _action_screenshot(
                         page.screenshot,
                         path=path,
                         full_page=full_page,
-                        type=screenshot_type
-                        if screenshot_type == "jpeg"
-                        else "png",
+                        type=(
+                            screenshot_type
+                            if screenshot_type == "jpeg"
+                            else "png"
+                        ),
                     )
                 else:
                     await page.screenshot(
                         path=path,
                         full_page=full_page,
-                        type=screenshot_type
-                        if screenshot_type == "jpeg"
-                        else "png",
+                        type=(
+                            screenshot_type
+                            if screenshot_type == "jpeg"
+                            else "png"
+                        ),
                     )
         return _tool_response(
             json.dumps(
@@ -1187,9 +1208,9 @@ async def _action_click(  # pylint: disable=too-many-branches
         if not isinstance(mods, list):
             mods = []
         kwargs = {
-            "button": button
-            if button in ("left", "right", "middle")
-            else "left",
+            "button": (
+                button if button in ("left", "right", "middle") else "left"
+            ),
         }
         if mods:
             kwargs["modifiers"] = [

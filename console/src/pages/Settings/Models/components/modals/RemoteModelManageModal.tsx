@@ -8,6 +8,7 @@ import {
   Tag,
   Checkbox,
   Collapse,
+  Tooltip,
 } from "@agentscope-ai/design";
 
 import {
@@ -701,10 +702,12 @@ export function RemoteModelManageModal({
                           <div className={styles.modelListItemInfo}>
                             <span className={styles.modelListItemName}>
                               {m.name}
+                            </span>
+                            <div className={styles.modelListItemTags}>
                               {m.supports_image === true && (
                                 <Tag
                                   color="blue"
-                                  style={{ fontSize: 11, marginLeft: 6 }}
+                                  style={{ fontSize: 11 }}
                                 >
                                   {t("models.tagImage")}
                                 </Tag>
@@ -712,25 +715,25 @@ export function RemoteModelManageModal({
                               {m.supports_video === true && (
                                 <Tag
                                   color="purple"
-                                  style={{ fontSize: 11, marginLeft: 4 }}
+                                  style={{ fontSize: 11 }}
                                 >
                                   {t("models.tagVideo")}
                                 </Tag>
                               )}
                               {m.supports_multimodal === false && (
-                                <Tag style={{ fontSize: 11, marginLeft: 6 }}>
-                                  {t("models.tagTextOnly")}
+                                <Tag style={{ fontSize: 11 }}>
+                                  {t("models.tagTextOnly", "纯文本")}
                                 </Tag>
                               )}
                               {m.supports_multimodal === null && (
                                 <Tag
                                   color="default"
-                                  style={{ fontSize: 11, marginLeft: 6 }}
+                                  style={{ fontSize: 11 }}
                                 >
                                   {t("models.tagNotProbed")}
                                 </Tag>
                               )}
-                            </span>
+                            </div>
                             <span className={styles.modelListItemId}>
                               {m.id}
                               {hasExtendedInfo && (
@@ -821,36 +824,36 @@ export function RemoteModelManageModal({
                                 >
                                   {t("models.userAdded")}
                                 </Tag>
-                                <Button
-                                  type="text"
-                                  size="small"
-                                  icon={<EyeOutlined />}
-                                  onClick={() => handleProbeMultimodal(m.id)}
-                                  loading={probingModelId === m.id}
-                                  style={{
-                                    marginRight: 4,
-                                    color: isDark
-                                      ? "rgba(255,255,255,0.65)"
-                                      : undefined,
-                                  }}
-                                >
-                                  {t("models.probeMultimodal", "测试多模态")}
-                                </Button>
-                                <Button
-                                  type="text"
-                                  size="small"
-                                  icon={<ApiOutlined />}
-                                  onClick={() => handleTestModel(m.id)}
-                                  loading={testingModelId === m.id}
-                                  style={{
-                                    marginRight: 4,
-                                    color: isDark
-                                      ? "rgba(255,255,255,0.65)"
-                                      : undefined,
-                                  }}
-                                >
-                                  {t("models.testConnection")}
-                                </Button>
+                                <Tooltip title={t("models.probeMultimodal", "测试多模态")}>
+                                  <Button
+                                    type="text"
+                                    size="small"
+                                    icon={<EyeOutlined />}
+                                    onClick={() => handleProbeMultimodal(m.id)}
+                                    loading={probingModelId === m.id}
+                                    style={{
+                                      marginRight: 4,
+                                      color: isDark
+                                        ? "rgba(255,255,255,0.65)"
+                                        : undefined,
+                                    }}
+                                  />
+                                </Tooltip>
+                                <Tooltip title={t("models.testConnection")}>
+                                  <Button
+                                    type="text"
+                                    size="small"
+                                    icon={<ApiOutlined />}
+                                    onClick={() => handleTestModel(m.id)}
+                                    loading={testingModelId === m.id}
+                                    style={{
+                                      marginRight: 4,
+                                      color: isDark
+                                        ? "rgba(255,255,255,0.65)"
+                                        : undefined,
+                                    }}
+                                  />
+                                </Tooltip>
                                 <Button
                                   type="text"
                                   size="small"

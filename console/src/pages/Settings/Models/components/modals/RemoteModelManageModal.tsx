@@ -336,6 +336,8 @@ export function RemoteModelManageModal({
     null,
   );
   const [form] = Form.useForm();
+const isLocalProvider = provider.is_local ?? false;
+  const canDiscover = isLocalProvider && provider.support_model_discovery;
 
   // OpenRouter filter state
   const isOpenRouter = provider.id === "openrouter";
@@ -347,8 +349,6 @@ export function RemoteModelManageModal({
     string | null
   >(null);
   const [loadingFilters, setLoadingFilters] = useState(false);
-
-  const canDiscover = provider.support_model_discovery;
 
   // For custom providers ALL models are deletable.
   // For built-in providers only extra_models are deletable.

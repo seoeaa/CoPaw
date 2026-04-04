@@ -336,7 +336,7 @@ export function RemoteModelManageModal({
     null,
   );
   const [form] = Form.useForm();
-const isLocalProvider = provider.is_local ?? false;
+  const isLocalProvider = provider.is_local ?? false;
   const canDiscover = isLocalProvider && provider.support_model_discovery;
 
   // OpenRouter filter state

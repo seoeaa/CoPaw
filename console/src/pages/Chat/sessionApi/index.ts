@@ -302,9 +302,7 @@ const convertMessages = (
         outputMsgs.push(toOutputMessage(messages[i++]));
       }
       if (outputMsgs.length)
-        result.push(
-          buildResponseCard(outputMsgs, messages.slice(startIdx, i)),
-        );
+        result.push(buildResponseCard(outputMsgs, messages.slice(startIdx, i)));
     }
   }
 

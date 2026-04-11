@@ -10,6 +10,7 @@ export interface ChatSpec {
   updated_at: string | null; // Chat last update timestamp (ISO 8601)
   meta?: Record<string, unknown>; // Additional metadata
   status?: ChatStatus; // Conversation status: idle or running
+  pinned?: boolean; // Whether the chat is pinned to the top
 }
 
 export interface MessageMetadata {
@@ -34,6 +35,7 @@ export interface ChatHistory {
 
 export interface ChatUpdateRequest {
   name?: string;
+  pinned?: boolean;
 }
 
 export interface ChatDeleteResponse {

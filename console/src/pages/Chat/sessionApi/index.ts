@@ -78,6 +78,8 @@ interface ExtendedSession extends IAgentScopeRuntimeWebUISession {
   createdAt?: string | null;
   /** Whether the backend is still generating a response for this session. */
   generating?: boolean;
+  /** Whether the chat is pinned to the top. */
+  pinned?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +149,9 @@ function normalizeOutputMessageContent(content: unknown): unknown {
 
 /**
  * Convert a backend message to a response output message.
- * Maps system + plugin_call_output → role "tool" and strips metadata.
+ * Maps system + plugin_call_output → role "tool".
+ * Note: metadata is preserved via spread but should not be relied upon
+ * in OutputMessage — use original Message[] instead for metadata access.
  */
 const toOutputMessage = (msg: Message): OutputMessage => ({
   ...msg,
@@ -198,13 +202,12 @@ function buildUserCard(msg: Message): IAgentScopeRuntimeWebUIMessage {
   };
 }
 
-/** Extract sender identity from a group of output messages. */
-function extractSenderInfo(outputMessages: OutputMessage[]): {
+/** Extract sender identity from original Message objects (metadata is preserved). */
+function extractSenderInfo(messages: Message[]): {
   name: string;
   timestamp: string | null;
 } {
-  // Use the first message's metadata for the sender name and timestamp
-  for (const msg of outputMessages) {
+  for (const msg of messages) {
     const metadata = msg.metadata as
       | {
           original_name?: string;
@@ -230,6 +233,7 @@ function extractSenderInfo(outputMessages: OutputMessage[]): {
  */
 const buildResponseCard = (
   outputMessages: OutputMessage[],
+  originalMessages: Message[],
 ): IAgentScopeRuntimeWebUIMessage => {
   const now = Math.floor(Date.now() / 1000);
   const maxSeq = outputMessages.reduce(
@@ -242,7 +246,7 @@ const buildResponseCard = (
     content: normalizeOutputMessageContent(msg.content),
   }));
 
-  const senderInfo = extractSenderInfo(outputMessages);
+  const senderInfo = extractSenderInfo(originalMessages);
 
   return {
     id: generateId(),
@@ -292,11 +296,15 @@ const convertMessages = (
     if (messages[i].role === ROLE_USER) {
       result.push(buildUserCard(messages[i++]));
     } else {
+      const startIdx = i;
       const outputMsgs: OutputMessage[] = [];
       while (i < messages.length && messages[i].role !== ROLE_USER) {
         outputMsgs.push(toOutputMessage(messages[i++]));
       }
-      if (outputMsgs.length) result.push(buildResponseCard(outputMsgs));
+      if (outputMsgs.length)
+        result.push(
+          buildResponseCard(outputMsgs, messages.slice(startIdx, i)),
+        );
     }
   }
 
@@ -314,6 +322,7 @@ const chatSpecToSession = (chat: ChatSpec): ExtendedSession =>
     meta: chat.meta || {},
     status: chat.status ?? "idle",
     createdAt: chat.created_at ?? null,
+    pinned: chat.pinned ?? false,
   }) as ExtendedSession;
 
 /** Returns true when id is a pure numeric local timestamp (not a backend UUID). */

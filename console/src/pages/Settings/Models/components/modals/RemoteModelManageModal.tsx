@@ -9,6 +9,7 @@ import {
   Collapse,
   Tooltip,
 } from "@agentscope-ai/design";
+import { AutoComplete } from "antd";
 import {
   DeleteOutlined,
   PlusOutlined,
@@ -200,6 +201,9 @@ export function RemoteModelManageModal({
 
   const canDiscover =
     (isLocalProvider || isOpenRouter) && provider.support_model_discovery;
+
+  const [discoveredModels, setDiscoveredModels] = useState<ModelInfo[]>([]);
+  const [loadingDiscoveredModels, setLoadingDiscoveredModels] = useState(false);
 
   // For custom providers ALL models are deletable.
   // For built-in providers only extra_models are deletable.
@@ -485,9 +489,26 @@ export function RemoteModelManageModal({
   };
 
   useEffect(() => {
-    // Do not auto-discover models when modal opens, as it may take some time and we don't want to block the UI.
-    // Instead, users can click the "Discover Models" button to trigger discovery when needed.
-  }, [open, canDiscover, provider.id, provider.models.length]);
+    if (!adding || !provider.support_model_discovery) {
+      setDiscoveredModels([]);
+      return;
+    }
+
+    // Fetch available models without saving them.
+    // User should explicitly click "Discover Models" button to
+    // fetch and save remote models.
+    setLoadingDiscoveredModels(true);
+    api
+      .discoverModels(provider.id, undefined, false)
+      .then((result) => {
+        const sorted = result.models
+          .slice()
+          .sort((a, b) => a.id.localeCompare(b.id));
+        setDiscoveredModels(sorted);
+      })
+      .catch(() => setDiscoveredModels([]))
+      .finally(() => setLoadingDiscoveredModels(false));
+  }, [adding, provider.id, provider.support_model_discovery]);
 
   const all_models = [
     ...(provider.models ?? []),
@@ -1036,7 +1057,32 @@ export function RemoteModelManageModal({
               rules={[{ required: true, message: t("models.modelIdLabel") }]}
               style={{ marginBottom: 12 }}
             >
-              <Input placeholder={t("models.modelIdPlaceholder")} />
+              {provider.support_model_discovery ? (
+                <AutoComplete
+                  placeholder={t("models.modelIdPlaceholder")}
+                  options={discoveredModels.map((model) => ({
+                    value: model.id,
+                    label: model.id,
+                  }))}
+                  filterOption={(
+                    inputValue: string,
+                    option?: { value?: string },
+                  ) =>
+                    option?.value
+                      ?.toLowerCase()
+                      .includes(inputValue.toLowerCase()) ?? false
+                  }
+                  notFoundContent={
+                    loadingDiscoveredModels
+                      ? t("common.loading")
+                      : t("models.noModels")
+                  }
+                >
+                  <Input />
+                </AutoComplete>
+              ) : (
+                <Input placeholder={t("models.modelIdPlaceholder")} />
+              )}
             </Form.Item>
             <Form.Item
               name="name"

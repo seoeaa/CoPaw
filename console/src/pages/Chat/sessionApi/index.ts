@@ -25,7 +25,7 @@ const ROLE_ASSISTANT = "assistant";
 const TYPE_PLUGIN_CALL_OUTPUT = "plugin_call_output";
 // const CARD_REQUEST = "AgentScopeRuntimeRequestCard";
 const CARD_RESPONSE = "AgentScopeRuntimeResponseCard";
-const CARD_SENDER_INFO = "CoPawSenderInfoCard";
+const CARD_SENDER_INFO = "QwenPawSenderInfoCard";
 
 // ---------------------------------------------------------------------------
 // Window globals

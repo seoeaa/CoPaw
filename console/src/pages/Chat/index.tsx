@@ -888,7 +888,7 @@ export default function ChatPage() {
       customToolRenderConfig:
         Object.keys(toolRenderConfig).length > 0 ? toolRenderConfig : undefined,
       cards: {
-        CoPawSenderInfoCard: SenderInfoCard,
+        QwenPawSenderInfoCard: SenderInfoCard,
       },
       actions: {
         list: [
